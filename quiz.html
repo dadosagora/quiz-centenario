@@ -10,113 +10,62 @@
 
   <style>
     :root{
-      --bg:#0b0b0b;            /* preto fundo */
-      --text:#f7f7f7;          /* branco suave */
-      --muted:#bdbdbd;         /* cinza texto secundário */
-      --gold:#c9a227;          /* amarelo-ouro */
-      --gold-2:#f1d36b;        /* destaque */
-      --error:#ff4d4f;
-      --ok:#22c55e;
-      --card:#141414;
-      --border:#222;
+      --bg:#0b0b0b; --text:#f7f7f7; --muted:#bdbdbd;
+      --gold:#c9a227; --gold-2:#f1d36b;
+      --error:#ff4d4f; --ok:#22c55e;
+      --card:#141414; --border:#222;
     }
     *{ box-sizing:border-box }
     html,body{
       margin:0; padding:0; background:var(--bg); color:var(--text);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, "Noto Sans", sans-serif;
     }
-    .wrap{
-      min-height:100dvh; display:flex; flex-direction:column;
-    }
+    .wrap{ min-height:100dvh; display:flex; flex-direction:column; }
     header{
       padding:24px 16px 8px; text-align:center; border-bottom:1px solid var(--border);
-      background:linear-gradient(180deg, #111 0%, #0b0b0b 100%);
+      background:linear-gradient(180deg,#111 0%,#0b0b0b 100%);
     }
     header h1{
-      margin:4px 0 8px; font-size:clamp(20px, 3.6vw, 34px); letter-spacing:0.2px;
-      font-weight:800;
-      background: linear-gradient(90deg, var(--gold-2), var(--gold));
-      -webkit-background-clip: text; background-clip:text; color:transparent;
+      margin:4px 0 8px; font-size:clamp(20px,3.6vw,34px);
+      font-weight:800; letter-spacing:.2px;
+      background:linear-gradient(90deg,var(--gold-2),var(--gold));
+      -webkit-background-clip:text; background-clip:text; color:transparent;
     }
     header p{ margin:0; color:var(--muted) }
-
-    main{
-      width:min(980px, 94vw); margin:24px auto; flex:1; padding-bottom:24px;
-    }
-
-    .card{
-      background:var(--card); border:1px solid var(--border);
-      border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,0.25);
-    }
-
-    .progress{
-      display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--muted); font-size:14px;
-    }
-    .bar{
-      flex:1; height:8px; background:#1c1c1c; border-radius:999px; overflow:hidden;
-      border:1px solid #262626;
-    }
-    .bar > div{
-      height:100%; width:0%; background:linear-gradient(90deg, var(--gold), var(--gold-2));
-      transition:width .25s ease;
-    }
-
-    .question{
-      font-size:clamp(18px, 2.6vw, 22px); line-height:1.35; margin:8px 0 16px; font-weight:700;
-    }
-
+    main{ width:min(980px,94vw); margin:24px auto; flex:1; padding-bottom:24px; }
+    .card{ background:var(--card); border:1px solid var(--border);
+      border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    .progress{ display:flex; align-items:center; gap:8px; margin-bottom:16px; color:var(--muted); font-size:14px; }
+    .bar{ flex:1; height:8px; background:#1c1c1c; border-radius:999px; overflow:hidden; border:1px solid #262626; }
+    .bar>div{ height:100%; width:0%; background:linear-gradient(90deg,var(--gold),var(--gold-2)); transition:width .25s ease; }
+    .question{ font-size:clamp(18px,2.6vw,22px); line-height:1.35; margin:8px 0 16px; font-weight:700; }
     .options{ display:grid; gap:10px; }
-    .opt{
-      display:flex; gap:12px; align-items:flex-start;
+    .opt{ display:flex; gap:12px; align-items:flex-start;
       padding:14px 14px; border-radius:12px; cursor:pointer;
-      background:#111; border:1px solid #1f1f1f; transition:transform .05s ease, border .2s;
-      user-select:none;
-    }
+      background:#111; border:1px solid #1f1f1f; transition:transform .05s ease,border .2s;
+      user-select:none; }
     .opt:hover{ border-color:#2a2a2a; transform:translateY(-1px) }
     .opt.disabled{ opacity:.65; pointer-events:none }
-    .badge{
-      flex:0 0 auto; width:28px; height:28px; border-radius:8px; display:grid; place-items:center;
-      background:#0e0e0e; border:1px solid #262626; font-weight:800; color:var(--gold);
-    }
+    .badge{ flex:0 0 auto; width:28px; height:28px; border-radius:8px; display:grid; place-items:center;
+      background:#0e0e0e; border:1px solid #262626; font-weight:800; color:var(--gold); }
     .feedback{ min-height:28px; margin:10px 2px 2px; font-weight:700 }
-    .feedback.ok{ color:var(--ok) }
-    .feedback.err{ color:var(--error) }
-
-    .actions{
-      display:flex; gap:10px; justify-content:space-between; margin-top:14px;
-    }
-    .btn{
-      appearance:none; border:none; border-radius:12px; padding:12px 16px; font-weight:700;
-      cursor:pointer; background:var(--gold); color:#111; transition:filter .2s, transform .05s ease;
-    }
-    .btn:hover{ filter:brightness(1.05) }
-    .btn:active{ transform:translateY(1px) }
+    .feedback.ok{ color:var(--ok) } .feedback.err{ color:var(--error) }
+    .actions{ display:flex; gap:10px; justify-content:space-between; margin-top:14px; }
+    .btn{ appearance:none; border:none; border-radius:12px; padding:12px 16px; font-weight:700;
+      cursor:pointer; background:var(--gold); color:#111; transition:filter .2s,transform .05s ease; }
+    .btn:hover{ filter:brightness(1.05) } .btn:active{ transform:translateY(1px) }
     .btn.secondary{ background:#1a1a1a; color:var(--text); border:1px solid #2a2a2a }
     .btn[disabled]{ opacity:.5; cursor:not-allowed }
-
-    .final{
-      text-align:center; padding:22px 14px;
-    }
-    .voucher{
-      margin:14px auto; padding:18px; border-radius:16px; border:1px dashed var(--gold);
-      background:linear-gradient(180deg, #0f0f0f 0%, #0b0b0b 100%);
-      width:min(560px, 100%);
-    }
+    .final{ text-align:center; padding:22px 14px; }
+    .voucher{ margin:14px auto; padding:18px; border-radius:16px; border:1px dashed var(--gold);
+      background:linear-gradient(180deg,#0f0f0f 0%,#0b0b0b 100%);
+      width:min(560px,100%); }
     .voucher h3{ margin:0 0 8px; font-size:22px; color:var(--gold-2) }
-    .code{
-      font-size: clamp(22px, 4.2vw, 28px);
-      letter-spacing:2px; font-weight:900; background:#111; border:1px solid #2a2a2a;
-      padding:10px 14px; border-radius:12px; display:inline-block; margin:6px 0 0;
-    }
+    .code{ font-size:clamp(22px,4.2vw,28px); letter-spacing:2px; font-weight:900;
+      background:#111; border:1px solid #2a2a2a; padding:10px 14px; border-radius:12px; display:inline-block; margin:6px 0 0; }
     .note{ color:var(--muted); font-size:14px; margin-top:8px }
-
-    footer{
-      border-top:1px solid var(--border); padding:10px 0;
-      background:linear-gradient(180deg, #0b0b0b 0%, #080808 100%);
-    }
-    .footer-inner{
-      width:min(980px, 94vw); margin:0 auto; display:flex; justify-content:center; align-items:center;
-    }
+    footer{ border-top:1px solid var(--border); padding:10px 0; background:linear-gradient(180deg,#0b0b0b 0%,#080808 100%); }
+    .footer-inner{ width:min(980px,94vw); margin:0 auto; display:flex; justify-content:center; align-items:center; }
     .footer-inner img{ max-width:100%; height:auto; display:block }
   </style>
 </head>
@@ -139,7 +88,7 @@
         <div id="options" class="options"></div>
         <div id="feedback" class="feedback"></div>
         <div class="actions">
-          <button class="btn secondary" id="btnSkip" title="Sem reprovação — pode pular">Pular</button>
+          <button class="btn secondary" id="btnSkip">Pular</button>
           <div style="display:flex; gap:10px;">
             <button class="btn secondary" id="btnTryAgain" disabled>Tentar novamente</button>
             <button class="btn" id="btnNext" disabled>Próxima</button>
@@ -170,292 +119,149 @@
 
   <footer>
     <div class="footer-inner">
-      <!-- TODO: trocar pelo banner oficial -->
       <img src="assets/banner-projeto-centenario.png" alt="Projeto Criciúma 100 Anos — HN Notícias" />
     </div>
   </footer>
 </div>
 
 <script>
-  // ==== CONFIGURÁVEIS (trocar conforme necessidade) ====
-  const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
-  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  const MAX_QUESTIONS = 8; // Use 8 perguntas (mudar para Infinity para usar todas ativas)
-  const PDF_URL = ""; // TODO: coloque aqui o link do PDF do livro (ex.: "https://.../livro.pdf")
+const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+const MAX_QUESTIONS = 8;
+const PDF_URL = "";
 
-  // ==== Estado ====
-  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  const els = {
-    progressWrap: document.getElementById('progressWrap'),
-    progressText: document.getElementById('progressText'),
-    progressBar: document.getElementById('progressBar'),
-    question: document.getElementById('question'),
-    options: document.getElementById('options'),
-    feedback: document.getElementById('feedback'),
-    btnTryAgain: document.getElementById('btnTryAgain'),
-    btnNext: document.getElementById('btnNext'),
-    btnSkip: document.getElementById('btnSkip'),
-    quizView: document.getElementById('quizView'),
-    finalView: document.getElementById('finalView'),
-    voucherCode: document.getElementById('voucherCode'),
-    voucherValidity: document.getElementById('voucherValidity'),
-    btnDownload: document.getElementById('btnDownload'),
-    btnCopy: document.getElementById('btnCopy'),
-  };
+const els = {
+  progressWrap: document.getElementById('progressWrap'),
+  progressText: document.getElementById('progressText'),
+  progressBar: document.getElementById('progressBar'),
+  question: document.getElementById('question'),
+  options: document.getElementById('options'),
+  feedback: document.getElementById('feedback'),
+  btnTryAgain: document.getElementById('btnTryAgain'),
+  btnNext: document.getElementById('btnNext'),
+  btnSkip: document.getElementById('btnSkip'),
+  quizView: document.getElementById('quizView'),
+  finalView: document.getElementById('finalView'),
+  voucherCode: document.getElementById('voucherCode'),
+  voucherValidity: document.getElementById('voucherValidity'),
+  btnDownload: document.getElementById('btnDownload'),
+  btnCopy: document.getElementById('btnCopy'),
+};
 
-  let userId = null;
-  let questions = [];
-  let index = 0;
-  let attemptsForCurrent = 0;
-  let hasAnsweredCorrectly = false;
+let userId = null, questions = [], index = 0, attemptsForCurrent = 0;
 
-  // ==== Utilidades ====
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+const wait = (ms) => new Promise(r=>setTimeout(r,ms));
+const shuffle = (arr)=>arr.sort(()=>Math.random()-.5);
+const fmtDateISO = d=>d.toISOString();
+const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
+function formatVoucherCode(){
+  const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join("");
+  return `HN100–${p(4)}-${p(4)}`;
+}
+function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
+function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  function shuffle(arr){
-    for(let i = arr.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
+async function insertSubmission({user_id,question_id,first_try_correct}){
+  const {error}=await client.from('submissions').insert({user_id,question_id,first_try_correct,answered_at:fmtDateISO(new Date())});
+  if(error)console.error('Erro ao gravar submission:',error);
+}
+
+async function ensureVoucher(user_id){
+  let code=formatVoucherCode(),issuedAt=new Date(),expiresAt=addDays(issuedAt,14);
+  for(let i=0;i<5;i++){
+    const {error}=await client.from('vouchers').insert({user_id,code,status:'pendente',issued_at:fmtDateISO(issuedAt),expires_at:fmtDateISO(expiresAt),partner:'Mina Wine Bar – Praça do Congresso'});
+    if(!error)return {code,issuedAt,expiresAt};
+    if(String(error.message||'').includes('duplicate')){code=formatVoucherCode();continue;}
+    console.error('Erro ao criar voucher:',error);break;
+  }
+  return {code,issuedAt,expiresAt};
+}
+
+function updateProgress(){
+  const total=questions.length;
+  els.progressWrap.style.display=total>0?'flex':'none';
+  els.progressText.textContent=`Pergunta ${Math.min(index+1,total)} de ${total}`;
+  els.progressBar.style.width=`${((index)/total)*100}%`;
+}
+
+function renderQuestion(){
+  const q=questions[index];
+  attemptsForCurrent=0; updateProgress();
+  els.question.textContent=q.enunciado;
+  els.feedback.textContent=''; els.feedback.className='feedback';
+  els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
+
+  let correctKey=normalizeKey(q.correta);
+  const optsRaw=[
+    {key:'a',label:'A',text:q.alternativa_a},
+    {key:'b',label:'B',text:q.alternativa_b},
+    {key:'c',label:'C',text:q.alternativa_c},
+    {key:'d',label:'D',text:q.alternativa_d},
+  ];
+
+  if(!['a','b','c','d'].includes(correctKey)&&q.correta){
+    const target=normalizeText(q.correta);
+    const hit=optsRaw.find(o=>normalizeText(o.text)===target);
+    if(hit)correctKey=hit.key;
   }
 
-  function fmtDateISO(date){
-    return date.toISOString();
-  }
+  const opts=optsRaw.map(o=>({...o,isCorrect:o.key===correctKey}));
+  if(!opts.some(o=>o.isCorrect)){opts[0].isCorrect=true;console.warn('Pergunta sem alternativa correta definida:',q.id);}
 
-  function addDays(date, days){
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d;
-  }
-
-  function formatVoucherCode(){
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // evitando 0/1/O/I
-    const pick = (n) => Array.from({length:n}, () => alphabet[Math.floor(Math.random()*alphabet.length)]).join("");
-    return `HN100–${pick(4)}-${pick(4)}`;
-  }
-
-  async function insertSubmission({ user_id, question_id, first_try_correct }){
-    const payload = { user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) };
-    const { error } = await client.from('submissions').insert(payload);
-    if(error){
-      console.error('Erro ao gravar submission:', error);
-    }
-  }
-
-  async function ensureVoucher(user_id){
-    // Primeiro, tenta verificar se já existe um voucher pendente para o usuário.
-    // (Se preferir permitir apenas 1 por usuário, pode-se optar por select; aqui geramos 1 ao final.)
-    let code = formatVoucherCode();
-    const issuedAt = new Date();
-    const expiresAt = addDays(issuedAt, 14);
-
-    // Tenta inserir com UNIQUE em code; se colidir, re-tenta até 5x
-    for(let i=0; i<5; i++){
-      const { error } = await client.from('vouchers').insert({
-        user_id,
-        code,
-        status: 'pendente',
-        issued_at: fmtDateISO(issuedAt),
-        expires_at: fmtDateISO(expiresAt),
-        partner: 'Mina Wine Bar – Praça do Congresso'
-      });
-      if(!error){
-        return { code, issuedAt, expiresAt };
+  els.options.innerHTML='';
+  for(const opt of opts){
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='opt';
+    btn.innerHTML=`<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
+    btn.addEventListener('click',async()=>{
+      attemptsForCurrent++;
+      if(opt.isCorrect){
+        els.feedback.textContent='✅ Resposta certa!';
+        els.feedback.className='feedback ok';
+        els.btnNext.disabled=false; els.btnTryAgain.disabled=true;
+        await insertSubmission({user_id:userId,question_id:q.id,first_try_correct:attemptsForCurrent===1});
+        disableOptions();
+      }else{
+        els.feedback.textContent='❌ Tente novamente';
+        els.feedback.className='feedback err';
+        els.btnTryAgain.disabled=false;
       }
-      if(error && String(error.message || '').toLowerCase().includes('duplicate')){
-        // gera outro e tenta de novo
-        code = formatVoucherCode();
-        continue;
-      } else {
-        console.error('Erro ao criar voucher:', error);
-        break;
-      }
-    }
-    // fallback: ainda retorna para não travar UX
-    return { code, issuedAt, expiresAt };
+    });
+    els.options.appendChild(btn);
   }
+}
 
-  function updateProgress(){
-    const total = questions.length;
-    els.progressWrap.style.display = total > 0 ? 'flex' : 'none';
-    els.progressText.textContent = `Pergunta ${Math.min(index+1, total)} de ${total}`;
-    const pct = total > 0 ? ((index)/total)*100 : 0;
-    els.progressBar.style.width = `${pct}%`;
-  }
+function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
+function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
 
-  function renderQuestion(){
-    const q = questions[index];
-    attemptsForCurrent = 0;
-    hasAnsweredCorrectly = false;
+async function loadQuestions(){
+  const {data,error}=await client.from('questions').select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa').eq('ativa',true);
+  if(error){console.error('Erro ao buscar perguntas:',error);return [];}
+  return shuffle(data||[]).slice(0,MAX_QUESTIONS);
+}
 
-    updateProgress();
+async function showFinal(){
+  const v=await ensureVoucher(userId);
+  els.quizView.style.display='none'; els.finalView.style.display='block';
+  els.voucherCode.textContent=v.code;
+  els.voucherValidity.textContent=`Válido até ${new Date(v.expiresAt).toLocaleDateString('pt-BR')}`;
+  if(PDF_URL){els.btnDownload.href=PDF_URL;}else{els.btnDownload.textContent='Baixar o livro (em breve)';els.btnDownload.disabled=true;}
+}
 
-    els.question.textContent = q.enunciado;
-    els.feedback.textContent = '';
-    els.feedback.className = 'feedback';
-    els.btnTryAgain.disabled = true;
-    els.btnNext.disabled = true;
+els.btnTryAgain.addEventListener('click',()=>{enableOptions();els.feedback.textContent='';els.feedback.className='feedback';els.btnTryAgain.disabled=true;});
+els.btnNext.addEventListener('click',async()=>{index++;if(index>=questions.length){await showFinal();}else renderQuestion();});
+els.btnSkip.addEventListener('click',async()=>{index++;if(index>=questions.length){await showFinal();}else renderQuestion();});
+els.btnCopy.addEventListener('click',async()=>{const c=els.voucherCode.textContent.trim();try{await navigator.clipboard.writeText(c);els.btnCopy.textContent='Copiado!';await wait(1200);}catch(_){els.btnCopy.textContent='Selecione e copie';await wait(1200);}els.btnCopy.textContent='Copiar código';});
 
-    // Monta opções na ordem A-D (pode embaralhar se quiser)
-    const opts = [
-      { key: 'A', text: q.alternativa_a, isCorrect: q.correta === 'a' },
-      { key: 'B', text: q.alternativa_b, isCorrect: q.correta === 'b' },
-      { key: 'C', text: q.alternativa_c, isCorrect: q.correta === 'c' },
-      { key: 'D', text: q.alternativa_d, isCorrect: q.correta === 'd' },
-    ];
-    // Se quiser embaralhar a ordem das alternativas, descomente:
-    // shuffle(opts);
-
-    els.options.innerHTML = '';
-    for(const opt of opts){
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'opt';
-      btn.innerHTML = `
-        <div class="badge">${opt.key}</div>
-        <div>${opt.text}</div>
-      `;
-      btn.addEventListener('click', async () => {
-        attemptsForCurrent++;
-        if(opt.isCorrect){
-          els.feedback.textContent = '✅ Resposta certa!';
-          els.feedback.className = 'feedback ok';
-          els.btnNext.disabled = false;
-          els.btnTryAgain.disabled = true;
-          hasAnsweredCorrectly = true;
-          // Grava submission (first_try_correct = tentativas == 1)
-          await insertSubmission({
-            user_id: userId,
-            question_id: q.id,
-            first_try_correct: attemptsForCurrent === 1
-          });
-          // Desabilita opções
-          disableOptions();
-        } else {
-          els.feedback.textContent = '❌ Tente novamente';
-          els.feedback.className = 'feedback err';
-          els.btnTryAgain.disabled = false;
-        }
-      });
-      els.options.appendChild(btn);
-    }
-  }
-
-  function disableOptions(){
-    [...els.options.querySelectorAll('.opt')].forEach(el => el.classList.add('disabled'));
-  }
-  function enableOptions(){
-    [...els.options.querySelectorAll('.opt')].forEach(el => el.classList.remove('disabled'));
-  }
-
-  async function loadQuestions(){
-    // Busca perguntas ativas; se quiser categorizar/ordenar, ajuste aqui
-    const { data, error } = await client
-      .from('questions')
-      .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
-      .eq('ativa', true);
-    if(error){
-      console.error('Erro ao buscar perguntas:', error);
-      return [];
-    }
-    const list = Array.isArray(data) ? data : [];
-    // Embaralha e corta no máximo configurado
-    return shuffle(list).slice(0, MAX_QUESTIONS);
-  }
-
-  async function showFinal(){
-    // Gera e grava voucher
-    const voucher = await ensureVoucher(userId);
-
-    els.quizView.style.display = 'none';
-    els.finalView.style.display = 'block';
-    els.voucherCode.textContent = voucher.code;
-    els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
-
-    // Botão Baixar Livro
-    if(PDF_URL && /^https?:\/\//i.test(PDF_URL)){
-      els.btnDownload.href = PDF_URL;
-      els.btnDownload.removeAttribute('disabled');
-    } else {
-      els.btnDownload.href = '#';
-      els.btnDownload.setAttribute('disabled', 'true');
-      els.btnDownload.textContent = 'Baixar o livro (em breve)';
-    }
-  }
-
-  // ==== Eventos ====
-  els.btnTryAgain.addEventListener('click', () => {
-    // habilita novamente as opções (caso tenha desabilitado manualmente)
-    enableOptions();
-    els.feedback.textContent = '';
-    els.feedback.className = 'feedback';
-    els.btnTryAgain.disabled = true;
-  });
-
-  els.btnNext.addEventListener('click', async () => {
-    // Se usuário clicou "Próxima" sem acertar (porque pulou), ainda registramos uma tentativa?
-    // Política: só registramos submission quando há acerto. Ao pular, sem gravação.
-    index++;
-    if(index >= questions.length){
-      await showFinal();
-    } else {
-      renderQuestion();
-    }
-  });
-
-  els.btnSkip.addEventListener('click', async () => {
-    // Sem reprovação, segue pro próximo. Não registra submission.
-    index++;
-    if(index >= questions.length){
-      await showFinal();
-    } else {
-      renderQuestion();
-    }
-  });
-
-  els.btnCopy.addEventListener('click', async () => {
-    const code = els.voucherCode.textContent.trim();
-    try{
-      await navigator.clipboard.writeText(code);
-      els.btnCopy.textContent = 'Copiado!';
-      await wait(1200);
-    }catch(_){
-      // fallback visual
-      els.btnCopy.textContent = 'Selecione e copie';
-      await wait(1200);
-    }
-    els.btnCopy.textContent = 'Copiar código';
-  });
-
-  // ==== Boot ====
-  (async function init(){
-    // Garante usuário (vindo do cadastro)
-    userId = localStorage.getItem('hn_user_id');
-    if(!userId){
-      // Se não há, volta para o cadastro
-      window.location.href = 'signup.html';
-      return;
-    }
-
-    questions = await loadQuestions();
-
-    if(!questions.length){
-      // fallback: informa e não quebra
-      els.question.textContent = 'Nenhuma pergunta ativa encontrada no momento. Tente novamente mais tarde.';
-      els.options.innerHTML = '';
-      els.feedback.textContent = '';
-      els.btnTryAgain.disabled = true; els.btnNext.disabled = true; els.btnSkip.disabled = true;
-      els.progressWrap.style.display = 'none';
-      return;
-    }
-
-    index = 0;
-    renderQuestion();
-  })();
+(async function init(){
+  userId=localStorage.getItem('hn_user_id');
+  if(!userId){window.location.href='signup.html';return;}
+  questions=await loadQuestions();
+  if(!questions.length){els.question.textContent='Nenhuma pergunta ativa encontrada no momento.';return;}
+  index=0; renderQuestion();
+})();
 </script>
 </body>
 </html>
-
