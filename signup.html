@@ -8,6 +8,7 @@
     :root{
       --bg:#fff; --text:#111; --muted:#555;
       --border:#e9e9e9; --gold:#c9a227; --gold-2:#b88900;
+      --ok:#0f7b37; --err:#b00020; --okbg:#e8f6ee; --errbg:#fdecee;
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
@@ -33,7 +34,11 @@
     .consent{display:flex;gap:10px;font-size:14px;align-items:flex-start;margin-top:6px}
     .btn{display:inline-block;width:100%;padding:14px 16px;border:1px solid #111;border-radius:12px;background:#111;color:#fff;font-size:16px;font-weight:800;cursor:pointer}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
-    .msg{background:#f6f6f6;padding:10px;border-radius:10px;font-size:14px;margin-top:12px;white-space:pre-wrap}
+    .msg{
+      background:#f6f6f6;padding:10px;border-radius:10px;font-size:14px;margin-top:12px;white-space:pre-wrap
+    }
+    .msg.ok{background:var(--okbg);color:var(--ok);border:1px solid #cdebd8}
+    .msg.err{background:var(--errbg);color:var(--err);border:1px solid #f6c9cf}
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
@@ -136,9 +141,19 @@
     );
   }
 
+  function showMsg(text, kind='ok'){
+    const out = document.getElementById('out');
+    out.hidden = false;
+    out.className = 'msg ' + (kind === 'err' ? 'err' : 'ok');
+    out.textContent = text;
+  }
+
   async function saveUser(e){
     e.preventDefault();
-    const btn = document.getElementById('submitBtn'); btn.disabled = true;
+    const btn = document.getElementById('submitBtn'); 
+    btn.disabled = true;
+    const out = document.getElementById('out'); 
+    out.hidden = true;
 
     const nome = document.getElementById('nome').value.trim();
     const cidade = document.getElementById('cidade').value.trim();
@@ -147,7 +162,8 @@
 
     if(!nome || !cidade || !whatsapp || !consent){
       alert('Preencha todos os campos e aceite a Política de Privacidade.');
-      btn.disabled = false; return false;
+      btn.disabled = false; 
+      return false;
     }
 
     const whatsapp_digits = whatsapp.replace(/\D/g,'');
@@ -155,6 +171,29 @@
     const created_at = new Date().toISOString();
 
     try{
+      // 1) PRÉ-CHECAGEM: já existe esse WhatsApp?
+      const q = new URL(PROJECT_URL + "/rest/v1/users");
+      q.searchParams.set("whatsapp", "eq."+whatsapp_digits);
+      q.searchParams.set("select", "id");
+      q.searchParams.set("limit", "1");
+      const existsRes = await fetch(q.toString(), {
+        headers:{
+          "apikey": ANON_KEY,
+          "Authorization": "Bearer " + ANON_KEY
+        }
+      });
+      if(!existsRes.ok){
+        const t = await existsRes.text();
+        throw new Error("Falha na verificação de WhatsApp ("+existsRes.status+"): "+t);
+      }
+      const existing = await existsRes.json();
+      if(Array.isArray(existing) && existing.length > 0){
+        showMsg("⚠️ Este número de WhatsApp já está cadastrado. Cada número pode participar apenas uma vez.", "err");
+        btn.disabled = false;
+        return false;
+      }
+
+      // 2) INSERT
       const res = await fetch(PROJECT_URL+"/rest/v1/users",{
         method:"POST",
         headers:{
@@ -163,12 +202,24 @@
         },
         body: JSON.stringify({ id, nome, cidade, whatsapp: whatsapp_digits, consent, created_at })
       });
-      if(!res.ok){ const t = await res.text(); throw new Error("Falha ao salvar ("+res.status+"): "+t); }
 
+      if(!res.ok){
+        const t = await res.text();
+        const low = t.toLowerCase();
+        // Tratamento extra: caso o índice UNIQUE já esteja ativo e ocorreu corrida
+        if(res.status === 409 || low.includes('duplicate') || low.includes('unique')){
+          showMsg("⚠️ Este número de WhatsApp já está cadastrado. Cada número pode participar apenas uma vez.", "err");
+          btn.disabled = false;
+          return false;
+        }
+        throw new Error("Falha ao salvar ("+res.status+"): "+t);
+      }
+
+      // 3) OK → guarda id no localStorage e segue para o quiz
       localStorage.setItem('hn_user_id', id);
-      const out = document.getElementById('out');
-      out.hidden = false; out.textContent = "Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.";
+      showMsg("Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.", "ok");
       setTimeout(()=> window.location.href="quiz.html", 600);
+
     }catch(err){
       alert(err.message);
     }finally{
