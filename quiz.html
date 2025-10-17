@@ -103,7 +103,7 @@
         </div>
       </div>
 
-      <!-- VISÃO FINAL (VOUCHER + CONTINUAR) -->
+      <!-- VISÃO FINAL (VOUCHER + CONTINUAR + COMPARTILHAR) -->
       <div id="finalView" class="final" style="display:none">
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
         <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
@@ -119,6 +119,13 @@
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
           <button id="btnCopy" class="btn secondary">Copiar código</button>
           <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
+        </div>
+
+        <!-- Botão de compartilhar no WhatsApp -->
+        <div class="btn-row" style="margin-top:8px;">
+          <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">
+            📲 Compartilhe com seus amigos
+          </a>
         </div>
 
         <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
@@ -201,6 +208,7 @@
     selectorWarn: document.getElementById('selectorWarn'),
     btnStartFiltered: document.getElementById('btnStartFiltered'),
     btnCancelSelector: document.getElementById('btnCancelSelector'),
+    btnShare: document.getElementById('btnShare'),
   };
 
   let userId = null;
@@ -396,6 +404,11 @@
       els.btnDownload.removeAttribute('disabled');
       els.btnDownload.textContent = 'Baixar o livro';
     }
+
+    // WhatsApp share dinâmico
+    const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
+    const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
+    els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
   }
 
   function showView(name){
