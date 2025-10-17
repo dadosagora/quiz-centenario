@@ -76,67 +76,85 @@
       <button class="btn-outline" onclick="document.getElementById('policy').close()">Fechar</button>
     </div>
   </dialog>
+<script>
+  const PROJECT_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
+  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
 
-  <script>
-    const PROJECT_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
-    const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+  function openPolicy() {
+    document.getElementById('policy').showModal();
+  }
 
-    function openPolicy() { document.getElementById('policy').showModal(); }
+  // Máscara dinâmica para WhatsApp
+  const wa = document.getElementById('whatsapp');
+  wa.addEventListener('input', () => {
+    let v = wa.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length >= 2) v = '(' + v.slice(0, 2) + ') ' + v.slice(2);
+    if (v.length >= 10) v = v.slice(0, 10) + '-' + v.slice(10);
+    wa.value = v;
+  });
 
-    // Máscara dinâmica para WhatsApp
-    const wa = document.getElementById('whatsapp');
-    wa.addEventListener('input', () => { 
-      let v = wa.value.replace(/\D/g, '').slice(0, 11);
-      if (v.length >= 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
-      if (v.length >= 10) v = v.slice(0, 10) + '-' + v.slice(10);
-      wa.value = v;
-    });
+  // Gera UUID v4
+  function uuidv4() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+  }
 
-    async function saveUser(e) {
-      e.preventDefault();
-      const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
+  async function saveUser(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
 
-      const nome = document.getElementById('nome').value.trim();
-      const cidade = document.getElementById('cidade').value.trim();
-      const whatsapp = document.getElementById('whatsapp').value.trim();
-      const consent = document.getElementById('consent').checked;
+    const nome = document.getElementById('nome').value.trim();
+    const cidade = document.getElementById('cidade').value.trim();
+    const whatsapp = document.getElementById('whatsapp').value.trim();
+    const consent = document.getElementById('consent').checked;
 
-      if (!nome || !cidade || !whatsapp || !consent) {
-        alert('Preencha todos os campos e aceite a Política de Privacidade.');
-        btn.disabled = false;
-        return false;
-      }
-
-      const whatsapp_digits = whatsapp.replace(/\D/g, '');
-
-      try {
-        const res = await fetch(PROJECT_URL + "/rest/v1/users", {
-          method: "POST",
-          headers: {
-            "apikey": ANON_KEY,
-            "Authorization": "Bearer " + ANON_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-          },
-          body: JSON.stringify({ nome, cidade, whatsapp: whatsapp_digits, consent })
-        });
-
-        if (!res.ok) {
-          const t = await res.text();
-          throw new Error("Falha ao salvar (" + res.status + "): " + t);
-        }
-
-        document.getElementById('out').hidden = false;
-        document.getElementById('out').textContent = "Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.";
-        setTimeout(() => window.location.href = "quiz.html", 800);
-      } catch (err) {
-        alert(err.message);
-      } finally {
-        btn.disabled = false;
-      }
+    if (!nome || !cidade || !whatsapp || !consent) {
+      alert('Preencha todos os campos e aceite a Política de Privacidade.');
+      btn.disabled = false;
       return false;
     }
-  </script>
+
+    const whatsapp_digits = whatsapp.replace(/\D/g, '');
+    const id = uuidv4();
+    const created_at = new Date().toISOString();
+
+    try {
+      const res = await fetch(PROJECT_URL + "/rest/v1/users", {
+        method: "POST",
+        headers: {
+          "apikey": ANON_KEY,
+          "Authorization": "Bearer " + ANON_KEY,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ id, nome, cidade, whatsapp: whatsapp_digits, consent, created_at })
+      });
+
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error("Falha ao salvar (" + res.status + "): " + t);
+      }
+
+      // 🔑 Salva ID localmente para o quiz reconhecer
+      localStorage.setItem('hn_user_id', id);
+
+      document.getElementById('out').hidden = false;
+      document.getElementById('out').textContent = "Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.";
+
+      // Redireciona após pequeno delay
+      setTimeout(() => {
+        window.location.href = "quiz.html";
+      }, 800);
+
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+    return false;
+  }
+</script> 
 </body>
 </html>
