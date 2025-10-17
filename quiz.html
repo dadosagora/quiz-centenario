@@ -19,10 +19,14 @@
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .wrap{min-height:100dvh;display:flex;flex-direction:column}
+
+    /* Header claro com logo grande na linha inteira */
     header{border-bottom:1px solid var(--border);background:#fff}
-    .head{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;padding:14px 0}
-    .head img{height:34px;width:auto}
-    .head h1{margin:0 0 0 4px;font-size:clamp(18px,3.6vw,22px)}
+    .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 8px}
+    .logo-wrap{display:flex;justify-content:center}
+    .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
+    .head h1{margin:8px 0 0;text-align:center;font-size:clamp(18px,3.6vw,24px)}
+
     main{width:min(980px,94vw);margin:22px auto;flex:1}
     .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px}
     .progress{display:flex;align-items:center;gap:8px;margin-bottom:16px;color:var(--muted);font-size:14px}
@@ -46,10 +50,12 @@
     .btn.secondary{background:#ffffff;color:#111;border:1px solid #cfcfcf}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .final{text-align:center;padding:10px}
+    .btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:12px}
     .voucher{margin:14px auto;padding:18px;border-radius:16px;border:1px dashed var(--gold-2);background:#fff;max-width:560px}
     .voucher h3{margin:0 0 8px;font-size:22px;color:var(--gold-2)}
     .code{font-size:clamp(22px,4.2vw,28px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:10px 14px;border-radius:12px;display:inline-block;margin:6px 0 0}
     .note{color:var(--muted);font-size:14px;margin-top:8px}
+
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
@@ -59,7 +65,7 @@
 <div class="wrap">
   <header>
     <div class="head">
-      <img src="assets/hn-logo.png" alt="HN Notícias">
+      <div class="logo-wrap"><img src="assets/hn-logo.png" alt="HN Notícias"></div>
       <h1>Quiz do Centenário de Criciúma</h1>
     </div>
   </header>
@@ -76,7 +82,7 @@
         <div id="options" class="options"></div>
         <div id="feedback" class="feedback"></div>
         <div class="actions">
-          <button class="btn secondary" id="btnSkip" title="Sem reprovação — pode pular">Pular</button>
+          <button class="btn secondary" id="btnSkip">Pular</button>
           <div style="display:flex; gap:10px;">
             <button class="btn secondary" id="btnTryAgain" disabled>Tentar novamente</button>
             <button class="btn" id="btnNext" disabled>Próxima</button>
@@ -95,9 +101,10 @@
           <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
         </div>
 
-        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:12px;">
+        <div class="btn-row">
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
           <button id="btnCopy" class="btn secondary">Copiar código</button>
+          <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
         </div>
 
         <p class="note" style="margin-top:14px;">Dica: tire um print desta tela e apresente no momento da retirada.</p>
@@ -116,8 +123,8 @@
   // ==== CONFIG ====
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  const MAX_QUESTIONS = 8;               // use 8 perguntas
-  const PDF_URL = "";                    // TODO: link do livro (https://...)
+  const MAX_QUESTIONS = 8;
+  const PDF_URL = ""; // coloque o link do livro
 
   // ==== Estado ====
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -193,7 +200,6 @@
       { key:'d', label:'D', text:q.alternativa_d },
     ];
 
-    // se o banco trouxe o TEXTO como "correta"
     if(!['a','b','c','d'].includes(correctKey) && q.correta){
       const target = normalizeText(q.correta);
       const hit = optsRaw.find(o => normalizeText(o.text) === target);
