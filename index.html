@@ -1,12 +1,106 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <title>Redirecionando…</title>
-  <meta http-equiv="refresh" content="0; url=signup.html">
-  <script>location.href="signup.html";</script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Projeto Criciúma 100 Anos — Quiz</title>
+  <meta name="description" content="Quiz do Centenário de Criciúma — participe, aprenda e ganhe seu voucher para retirar a revista do Centenário." />
+
+  <style>
+    :root{
+      --bg:#0b0b0b; --text:#f7f7f7; --muted:#c9c9c9;
+      --gold:#c9a227; --gold-2:#f1d36b; --card:#141414; --border:#222;
+    }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, "Noto Sans", sans-serif }
+    .wrap{ min-height:100dvh; display:flex; flex-direction:column }
+    header{ padding:28px 16px 12px; text-align:center; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#111,#0b0b0b) }
+    .brand{ font-weight:900; letter-spacing:.6px; color:#fff; opacity:.95 }
+    .brand b{ background:linear-gradient(90deg,var(--gold-2),var(--gold)); -webkit-background-clip:text; background-clip:text; color:transparent }
+    h1{ margin:8px 0 6px; font-size:clamp(22px,4.2vw,40px); font-weight:900; letter-spacing:.2px }
+    .subtitle{ margin:0; color:var(--muted); font-size:clamp(14px,2.4vw,16px) }
+
+    main{ width:min(980px,94vw); margin:28px auto; flex:1 }
+    .hero{ background:var(--card); border:1px solid var(--border); border-radius:18px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.25) }
+    .hero-top{ padding:18px; display:grid; gap:14px }
+    .ill{
+      width:100%; height:180px; background:#0f0f0f; border:1px solid #1f1f1f; border-radius:12px;
+      display:grid; place-items:center; color:#888; font-weight:700;
+    }
+
+    .content{ padding:0 18px 18px; display:grid; gap:12px }
+    .content p{ margin:0; line-height:1.55 }
+    .strong{ font-weight:800; color:#fff }
+    .list{ margin-top:6px; color:var(--muted); }
+    .list li{ margin:6px 0 }
+
+    .cta{
+      display:flex; justify-content:center; padding:10px 18px 18px;
+    }
+    .btn{
+      appearance:none; border:none; border-radius:14px; padding:14px 18px; font-weight:900;
+      background:#111; color:#fff; border:1px solid #2a2a2a; cursor:pointer;
+      transition:filter .2s, transform .05s ease, background .2s;
+      min-width:260px; font-size:16px;
+    }
+    .btn:hover{ filter:brightness(1.1) }
+    .btn:active{ transform:translateY(1px) }
+    .btn::before{ content:"📯 "; }
+
+    footer{ border-top:1px solid var(--border); background:linear-gradient(180deg,#0b0b0b,#080808); padding:12px 0 }
+    .footer-inner{ width:min(980px,94vw); margin:0 auto; display:flex; justify-content:center; align-items:center }
+    .footer-inner img{ max-width:100%; height:auto; display:block }
+  </style>
 </head>
 <body>
-  <p>Redirecionando para o <a href="signup.html">cadastro</a>…</p>
+<div class="wrap">
+  <header>
+    <div class="brand">HN <b>NOTÍCIAS</b></div>
+    <h1>PROJETO CRICIÚMA 100 ANOS</h1>
+    <p class="subtitle">Um século de história, conquistas e memórias.</p>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-top">
+        <!-- Se quiser trocar por uma ilustração hero, coloque uma imagem aqui -->
+        <div class="ill">
+          Ilustração / capa do projeto (opcional)
+        </div>
+      </div>
+
+      <div class="content">
+        <p>Para celebrar o centenário de emancipação política de Criciúma, criamos o <span class="strong">Quiz do Centenário</span> — uma forma divertida de testar seus conhecimentos sobre a cidade e ganhar um presente especial.</p>
+        <p class="strong">Como funciona?</p>
+        <p>Você responde às perguntas (com feedback imediato). Ao concluir, liberamos o <span class="strong">download do livro</span> e geramos um <span class="strong">código para retirada da revista física</span> no parceiro.</p>
+
+        <ul class="list">
+          <li>📕 O download é gratuito.</li>
+          <li>🏛️ 1 revista por pessoa (enquanto durar o estoque).</li>
+          <li>⏳ Código válido por 14 dias.</li>
+          <li>📍 Parceiro: Mina Wine Bar – Praça do Congresso.</li>
+        </ul>
+      </div>
+
+      <div class="cta">
+        <button class="btn" id="btnStart">Quero participar do Quiz</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <!-- Use a mesma arte do rodapé das outras páginas -->
+      <img src="assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos — HN Notícias">
+    </div>
+  </footer>
+</div>
+
+<script>
+  // Botão inicia o fluxo indo para o cadastro
+  document.getElementById('btnStart').addEventListener('click', () => {
+    window.location.href = 'signup.html';
+  });
+</script>
 </body>
 </html>
