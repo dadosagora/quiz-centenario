@@ -49,6 +49,14 @@
     .code{font-size:clamp(20px,4vw,26px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:8px 12px;border-radius:12px;display:inline-block;margin:6px 0 0}
     .note{color:var(--muted);font-size:14px;margin-top:6px}
 
+    /* Tela de seleção (categorias/dificuldades) */
+    .selector{display:none}
+    .selector .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .selector label{font-weight:700;font-size:14px;margin:2px 0 6px;display:block}
+    .selector select{width:100%;padding:10px;border:1px solid #dcdcdc;border-radius:10px;background:#fff}
+    .selector .hint{color:var(--muted);font-size:13px;margin:6px 0 0}
+    .selector .warn{color:#b00020;background:#fdecee;border:1px solid #f6c9cf;border-radius:10px;padding:8px;margin-top:10px;display:none}
+
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
@@ -81,6 +89,7 @@
         <div class="bar"><div id="progressBar"></div></div>
       </div>
 
+      <!-- VISÃO QUIZ -->
       <div id="quizView">
         <div id="question" class="question"></div>
         <div id="options" class="options"></div>
@@ -94,6 +103,7 @@
         </div>
       </div>
 
+      <!-- VISÃO FINAL (VOUCHER + CONTINUAR) -->
       <div id="finalView" class="final" style="display:none">
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
         <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
@@ -118,6 +128,31 @@
 
         <p class="note" id="answeredCount" style="margin-top:10px;"></p>
       </div>
+
+      <!-- VISÃO SELETOR (categoria + dificuldade) -->
+      <div id="selectorView" class="selector">
+        <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Escolha como quer continuar</h2>
+        <p class="note">Selecione uma <strong>categoria</strong> e uma <strong>dificuldade</strong> para carregar mais 10 perguntas.</p>
+
+        <div class="row" style="margin-top:8px;">
+          <div>
+            <label for="selCategoria">Categoria</label>
+            <select id="selCategoria"></select>
+          </div>
+          <div>
+            <label for="selDificuldade">Dificuldade</label>
+            <select id="selDificuldade"></select>
+          </div>
+        </div>
+
+        <p class="hint">As opções acima são geradas com base nas perguntas ativas do banco.</p>
+        <div id="selectorWarn" class="warn">Não encontramos perguntas com esse filtro. Tente outra combinação.</div>
+
+        <div class="btn-row" style="margin-top:10px;">
+          <button id="btnStartFiltered" class="btn">Começar esse lote</button>
+          <button id="btnCancelSelector" class="btn secondary">Cancelar</button>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -133,7 +168,7 @@
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "";      // link do livro se já tiver
-  const BATCH_SIZE = 10;   // 10 por “lote”
+  const BATCH_SIZE = 10;   // 10 por lote
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -150,6 +185,7 @@
     btnSkip: document.getElementById('btnSkip'),
     quizView: document.getElementById('quizView'),
     finalView: document.getElementById('finalView'),
+    selectorView: document.getElementById('selectorView'),
     voucherBox: document.getElementById('voucherBox'),
     voucherCode: document.getElementById('voucherCode'),
     voucherValidity: document.getElementById('voucherValidity'),
@@ -160,6 +196,11 @@
     finalTitle: document.getElementById('finalTitle'),
     finalSubtitle: document.getElementById('finalSubtitle'),
     answeredCount: document.getElementById('answeredCount'),
+    selCategoria: document.getElementById('selCategoria'),
+    selDificuldade: document.getElementById('selDificuldade'),
+    selectorWarn: document.getElementById('selectorWarn'),
+    btnStartFiltered: document.getElementById('btnStartFiltered'),
+    btnCancelSelector: document.getElementById('btnCancelSelector'),
   };
 
   let userId = null;
@@ -218,7 +259,7 @@
     els.btnTryAgain.disabled = true;
     els.btnNext.disabled = true;
 
-    // correta pode vir como a/b/c/d OU como o texto da alternativa
+    // correta pode vir como A/B/C/D OU como o texto da alternativa
     let correctKey = normalizeKey(q.correta);
     const optsRaw = [
       {key:'a',label:'A',text:q.alternativa_a},
@@ -264,35 +305,61 @@
   function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
   function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
 
-  function startBatch(){
-    // pega as próximas não usadas
+  function computeUnique(list, key){
+    const s = new Set();
+    for(const q of list){ const v = (q[key]||'').toString().trim(); if(v) s.add(v); }
+    return Array.from(s).sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
+  }
+
+  function populateSelector(){
+    const cats = computeUnique(allQuestions, 'categoria');
+    const difs = computeUnique(allQuestions, 'dificuldade');
+
+    els.selCategoria.innerHTML = '';
+    els.selDificuldade.innerHTML = '';
+
+    for(const c of cats){
+      const opt = document.createElement('option'); opt.value=c; opt.textContent=c;
+      els.selCategoria.appendChild(opt);
+    }
+    for(const d of difs){
+      const opt = document.createElement('option'); opt.value=d; opt.textContent=d;
+      els.selDificuldade.appendChild(opt);
+    }
+  }
+
+  function startBatch({ categoria=null, dificuldade=null } = {}){
+    // pega as próximas não usadas, com filtro opcional
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
-    batch = remaining.slice(0, BATCH_SIZE);
+    let pool = remaining;
+    if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
+    if(dificuldade) pool = pool.filter(q => (q.dificuldade||'').trim() === dificuldade);
+
+    batch = pool.slice(0, BATCH_SIZE);
     idxInBatch = 0;
 
-    // se não há mais perguntas, só mostra final “acabou”
     if(batch.length === 0){
-      showFinal({ noMore:true });
+      // mostra seletor com aviso
+      els.selectorWarn.style.display = 'block';
+      showView('selector');
       return;
     }
 
-    els.quizView.style.display = 'block';
-    els.finalView.style.display = 'none';
+    showView('quiz');
     renderQuestion();
   }
 
   async function loadAllQuestions(){
     const { data, error } = await client
       .from('questions')
-      .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
+      .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
       .eq('ativa', true);
     if(error){ console.error('Erro ao buscar perguntas:', error); return []; }
     return shuffle(data || []);
   }
 
   async function showFinal({ noMore=false } = {}){
-    els.quizView.style.display = 'none';
-    els.finalView.style.display = 'block';
+    showView('final');
 
     // voucher apenas no primeiro lote concluído
     if(!voucherIssued){
@@ -313,14 +380,14 @@
     const totalAtivas = allQuestions.length;
     els.answeredCount.textContent = `Você já respondeu ${answeredTotal} de ${totalAtivas} perguntas disponíveis.`;
 
-    // exibe “Continuar” apenas se há mais perguntas
+    // exibe “Continuar” apenas se há mais perguntas globais
     const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
-    els.continueRow.style.display = (!noMore && remaining > 0) ? 'flex' : 'none';
+    els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
 
     // barra completa no final
     els.progressBar.style.width = '100%';
 
-    // botões
+    // PDF
     els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
     if(!(PDF_URL && /^https?:\/\//i.test(PDF_URL))){
       els.btnDownload.setAttribute('disabled','true');
@@ -331,6 +398,13 @@
     }
   }
 
+  function showView(name){
+    // name = 'quiz' | 'final' | 'selector'
+    els.quizView.style.display     = (name==='quiz') ? 'block' : 'none';
+    els.finalView.style.display    = (name==='final') ? 'block' : 'none';
+    els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
+  }
+
   // === Eventos ===
   els.btnTryAgain.addEventListener('click',()=>{enableOptions();els.feedback.textContent='';els.feedback.className='feedback';els.btnTryAgain.disabled=true;});
   els.btnNext.addEventListener('click',async()=>{
@@ -339,9 +413,8 @@
     else { renderQuestion(); }
   });
   els.btnSkip.addEventListener('click',async()=>{
-    // pular: não grava submission e segue
     const q = batch[idxInBatch];
-    askedIds.add(q.id); // ainda assim marque como “vista” para não repetir
+    askedIds.add(q.id); // marcar como vista para não repetir
     idxInBatch++;
     if(idxInBatch >= batch.length){ await showFinal(); }
     else { renderQuestion(); }
@@ -352,7 +425,26 @@
     catch(_){ els.btnCopy.textContent='Selecione e copie'; await wait(1000); }
     els.btnCopy.textContent='Copiar código';
   });
-  els.btnContinue.addEventListener('click', ()=> startBatch());
+
+  // CONTINUAR → abre seletor
+  els.btnContinue.addEventListener('click', ()=>{
+    populateSelector();
+    els.selectorWarn.style.display = 'none';
+    showView('selector');
+  });
+
+  // Seletor: iniciar lote filtrado
+  els.btnStartFiltered.addEventListener('click', ()=>{
+    const categoria = els.selCategoria.value;
+    const dificuldade = els.selDificuldade.value;
+    els.selectorWarn.style.display = 'none';
+    startBatch({ categoria, dificuldade });
+  });
+
+  // Seletor: cancelar e voltar ao final
+  els.btnCancelSelector.addEventListener('click', ()=>{
+    showView('final');
+  });
 
   // === Boot ===
   (async function init(){
@@ -361,12 +453,13 @@
 
     allQuestions = await loadAllQuestions();
     if(!allQuestions.length){
-      els.question.textContent = 'Nenhuma pergunta ativa encontrada no momento. Tente novamente mais tarde.';
-      els.options.innerHTML = '';
-      els.btnTryAgain.disabled = true; els.btnNext.disabled = true; els.btnSkip.disabled = true;
+      document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
+      document.getElementById('options').innerHTML='';
+      els.btnTryAgain.disabled=true; els.btnNext.disabled=true; els.btnSkip.disabled=true;
       return;
     }
 
+    // 1º lote sem filtro (para o voucher)
     startBatch();
   })();
 </script>
