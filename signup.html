@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cadastro – Quiz do Centenário</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; background:#fff; color:#111; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 28px; margin: 6px 0 12px; }
+    .field { margin: 12px 0; }
+    label span { display:block; font-size:14px; font-weight:600; margin-bottom:6px; }
+    input[type="text"], input[type="tel"] { width:100%; padding:14px 12px; font-size:16px; border:1px solid #ddd; border-radius:12px; outline:none; }
+    input:focus { border-color:#111; }
+    .consent { display:flex; gap:10px; font-size:14px; align-items:flex-start; }
+    .btn { display:inline-block; width:100%; padding:14px 16px; border:0; border-radius:12px; background:#000; color:#fff; font-size:16px; cursor:pointer; }
+    .btn[disabled] { opacity:.5; cursor:not-allowed; }
+    .msg { background:#f6f6f6; padding:12px; border-radius:10px; font-size:14px; margin-top:16px; white-space:pre-wrap; }
+    footer { position:sticky; bottom:0; background:#fff8e1; border-top:1px solid #f0e2b0; padding:10px 16px; display:flex; justify-content:center; }
+    footer .banner { font-weight:700; color:#b88900; }
+    .link { color:#b88900; text-decoration:underline; cursor:pointer; }
+    dialog { border:0; border-radius:16px; padding:0; max-width:680px; }
+    .modal-header { padding:16px 20px; border-bottom:1px solid #eee; font-weight:700; }
+    .modal-body { padding:16px 20px; font-size:14px; line-height:1.4; max-height:55vh; overflow:auto; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:12px 20px; border-top:1px solid #eee; }
+    .btn-outline { background:#fff; color:#111; border:1px solid #ddd; border-radius:10px; padding:10px 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Cadastro</h1>
+    <p>Preencha seus dados para participar do <strong>Quiz do Centenário de Criciúma</strong>.</p>
+
+    <form id="f" onsubmit="return saveUser(event)">
+      <div class="field">
+        <label><span>Nome completo</span>
+          <input id="nome" type="text" required placeholder="Ex.: Maria da Silva" autocomplete="name">
+        </label>
+      </div>
+      <div class="field">
+        <label><span>Cidade</span>
+          <input id="cidade" type="text" required placeholder="Ex.: Criciúma" autocomplete="address-level2">
+        </label>
+      </div>
+      <div class="field">
+        <label><span>WhatsApp</span>
+          <input id="whatsapp" type="tel" inputmode="tel" required placeholder="(48) 99999-0000" maxlength="16">
+        </label>
+      </div>
+
+      <label class="consent">
+        <input id="consent" type="checkbox" required>
+        <span>Concordo com o tratamento dos meus dados pessoais conforme a <a class="link" onclick="openPolicy()">Política de Privacidade</a>.</span>
+      </label>
+
+      <div class="field">
+        <button id="submitBtn" class="btn">Salvar e iniciar quiz</button>
+      </div>
+    </form>
+
+    <div id="out" class="msg" hidden></div>
+  </div>
+
+  <footer>
+    <div class="banner">Área do banner do Projeto Criciúma 100 Anos</div>
+  </footer>
+
+  <dialog id="policy">
+    <div class="modal-header">Política de Privacidade – Resumo</div>
+    <div class="modal-body">
+      Usaremos seu <strong>nome</strong>, <strong>cidade</strong> e <strong>WhatsApp</strong> para registrar sua participação, gerar e controlar o código de retirada da revista, e liberar o download do livro do Centenário. Não vendemos seus dados. O parceiro recebe apenas o <strong>código</strong>, sem seus dados pessoais.
+      <hr>
+      Para exercer seus direitos (LGPD), contate: contato@hnnoticias.com.br
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="document.getElementById('policy').close()">Fechar</button>
+    </div>
+  </dialog>
+
+  <script>
+    const PROJECT_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
+    const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+
+    function openPolicy() { document.getElementById('policy').showModal(); }
+
+    // Máscara dinâmica para WhatsApp
+    const wa = document.getElementById('whatsapp');
+    wa.addEventListener('input', () => { 
+      let v = wa.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length >= 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+      if (v.length >= 10) v = v.slice(0, 10) + '-' + v.slice(10);
+      wa.value = v;
+    });
+
+    async function saveUser(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+
+      const nome = document.getElementById('nome').value.trim();
+      const cidade = document.getElementById('cidade').value.trim();
+      const whatsapp = document.getElementById('whatsapp').value.trim();
+      const consent = document.getElementById('consent').checked;
+
+      if (!nome || !cidade || !whatsapp || !consent) {
+        alert('Preencha todos os campos e aceite a Política de Privacidade.');
+        btn.disabled = false;
+        return false;
+      }
+
+      const whatsapp_digits = whatsapp.replace(/\D/g, '');
+
+      try {
+        const res = await fetch(PROJECT_URL + "/rest/v1/users", {
+          method: "POST",
+          headers: {
+            "apikey": ANON_KEY,
+            "Authorization": "Bearer " + ANON_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify({ nome, cidade, whatsapp: whatsapp_digits, consent })
+        });
+
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error("Falha ao salvar (" + res.status + "): " + t);
+        }
+
+        document.getElementById('out').hidden = false;
+        document.getElementById('out').textContent = "Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.";
+        setTimeout(() => window.location.href = "quiz.html", 800);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+      }
+      return false;
+    }
+  </script>
+</body>
+</html>
