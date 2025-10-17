@@ -15,10 +15,14 @@
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .wrap{min-height:100dvh;display:flex;flex-direction:column}
+
+    /* HEADER claro com logo grande (linha inteira) e subtítulo abaixo */
     header{border-bottom:1px solid var(--border);background:#fff}
-    .head{width:min(980px,94vw);margin:0 auto;display:flex;align-items:center;gap:12px;padding:14px 0}
-    .head img{height:34px;width:auto}
-    .title{font-weight:900;font-size:clamp(18px,3.6vw,22px)}
+    .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 10px}
+    .logo-wrap{display:flex;justify-content:center}
+    .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
+    .header-sub{margin:8px 0 0;text-align:center;color:#111;font-weight:900;font-size:clamp(18px,3.6vw,22px)}
+
     main{width:min(980px,94vw);margin:22px auto;flex:1}
     .hero{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
     .cover{padding:18px;border-bottom:1px solid var(--border)}
@@ -37,15 +41,16 @@
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
-    .gold{color:var(--gold-2)}
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="head">
-      <img src="assets/hn-logo.png" alt="HN Notícias">
-      <div class="title">Projeto Criciúma 100 Anos</div>
+      <div class="logo-wrap">
+        <img src="assets/hn-logo.png" alt="HN Notícias">
+      </div>
+      <div class="header-sub">Quiz do Centenário de Criciúma</div>
     </div>
   </header>
 
@@ -74,6 +79,7 @@
 
   <footer>
     <div class="footer-inner">
+      <!-- ajuste o nome se no repo estiver diferente -->
       <img src="assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos — banner oficial">
     </div>
   </footer>
