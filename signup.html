@@ -5,156 +5,177 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cadastro – Quiz do Centenário</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; background:#fff; color:#111; }
-    .wrap { max-width: 640px; margin: 0 auto; padding: 24px; }
-    h1 { font-size: 28px; margin: 6px 0 12px; }
-    .field { margin: 12px 0; }
-    label span { display:block; font-size:14px; font-weight:600; margin-bottom:6px; }
-    input[type="text"], input[type="tel"] { width:100%; padding:14px 12px; font-size:16px; border:1px solid #ddd; border-radius:12px; outline:none; }
-    input:focus { border-color:#111; }
-    .consent { display:flex; gap:10px; font-size:14px; align-items:flex-start; }
-    .btn { display:inline-block; width:100%; padding:14px 16px; border:0; border-radius:12px; background:#000; color:#fff; font-size:16px; cursor:pointer; }
-    .btn[disabled] { opacity:.5; cursor:not-allowed; }
-    .msg { background:#f6f6f6; padding:12px; border-radius:10px; font-size:14px; margin-top:16px; white-space:pre-wrap; }
-    footer { position:sticky; bottom:0; background:#fff8e1; border-top:1px solid #f0e2b0; padding:10px 16px; display:flex; justify-content:center; }
-    footer .banner { font-weight:700; color:#b88900; }
-    .link { color:#b88900; text-decoration:underline; cursor:pointer; }
-    dialog { border:0; border-radius:16px; padding:0; max-width:680px; }
-    .modal-header { padding:16px 20px; border-bottom:1px solid #eee; font-weight:700; }
-    .modal-body { padding:16px 20px; font-size:14px; line-height:1.4; max-height:55vh; overflow:auto; }
-    .modal-actions { display:flex; gap:8px; justify-content:flex-end; padding:12px 20px; border-top:1px solid #eee; }
-    .btn-outline { background:#fff; color:#111; border:1px solid #ddd; border-radius:10px; padding:10px 14px; }
+    :root{
+      --bg:#fff; --text:#111; --muted:#555;
+      --border:#e9e9e9; --gold:#c9a227; --gold-2:#b88900;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .wrap{min-height:100dvh;display:flex;flex-direction:column}
+
+    /* Header unificado (logo grande + título) */
+    header{border-bottom:1px solid var(--border);background:#fff}
+    .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 8px}
+    .logo-wrap{display:flex;justify-content:center}
+    .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
+    .head h1{margin:8px 0 0;text-align:center;font-size:clamp(18px,3.6vw,24px)}
+
+    main{width:min(980px,94vw);margin:16px auto;flex:1}
+    .card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px}
+    h2{font-size:22px;margin:0 0 6px}
+    p.lead{margin:0 0 12px;color:var(--muted)}
+    .field{margin:10px 0}
+    label span{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+    input[type="text"],input[type="tel"]{
+      width:100%;padding:12px 12px;font-size:16px;border:1px solid #ddd;border-radius:12px;outline:none
+    }
+    input:focus{border-color:#111}
+    .consent{display:flex;gap:10px;font-size:14px;align-items:flex-start;margin-top:6px}
+    .btn{display:inline-block;width:100%;padding:14px 16px;border:1px solid #111;border-radius:12px;background:#111;color:#fff;font-size:16px;font-weight:800;cursor:pointer}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    .msg{background:#f6f6f6;padding:10px;border-radius:10px;font-size:14px;margin-top:12px;white-space:pre-wrap}
+    footer{border-top:1px solid var(--border);background:#fff}
+    .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
+    .footer-inner img{max-width:100%;height:auto}
+    .link{color:var(--gold-2);text-decoration:underline;cursor:pointer}
+
+    /* Compactar em telas baixas p/ evitar scroll */
+    @media (max-height:760px){
+      .head{padding:8px 0 4px}
+      .logo-wrap img{max-width:360px}
+      .head h1{font-size:18px;margin-top:6px}
+      main{margin:10px auto}
+      .card{padding:12px}
+      h2{font-size:20px}
+      .btn{padding:12px 14px}
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Cadastro</h1>
-    <p>Preencha seus dados para participar do <strong>Quiz do Centenário de Criciúma</strong>.</p>
+<div class="wrap">
+  <header>
+    <div class="head">
+      <div class="logo-wrap"><img src="assets/hn-logo.png" alt="HN Notícias"></div>
+      <h1>Quiz do Centenário de Criciúma</h1>
+    </div>
+  </header>
 
-    <form id="f" onsubmit="return saveUser(event)">
-      <div class="field">
-        <label><span>Nome completo</span>
-          <input id="nome" type="text" required placeholder="Ex.: Maria da Silva" autocomplete="name">
+  <main>
+    <div class="card">
+      <h2>Cadastro</h2>
+      <p class="lead">Preencha seus dados para participar do <strong>Quiz do Centenário de Criciúma</strong>.</p>
+
+      <form id="f" onsubmit="return saveUser(event)">
+        <div class="field">
+          <label><span>Nome completo</span>
+            <input id="nome" type="text" required placeholder="Ex.: Maria da Silva" autocomplete="name">
+          </label>
+        </div>
+        <div class="field">
+          <label><span>Cidade</span>
+            <input id="cidade" type="text" required placeholder="Ex.: Criciúma" autocomplete="address-level2">
+          </label>
+        </div>
+        <div class="field">
+          <label><span>WhatsApp</span>
+            <input id="whatsapp" type="tel" inputmode="tel" required placeholder="(48) 99999-0000" maxlength="16">
+          </label>
+        </div>
+
+        <label class="consent">
+          <input id="consent" type="checkbox" required>
+          <span>Concordo com o tratamento dos meus dados pessoais conforme a <a class="link" onclick="openPolicy()">Política de Privacidade</a>.</span>
         </label>
-      </div>
-      <div class="field">
-        <label><span>Cidade</span>
-          <input id="cidade" type="text" required placeholder="Ex.: Criciúma" autocomplete="address-level2">
-        </label>
-      </div>
-      <div class="field">
-        <label><span>WhatsApp</span>
-          <input id="whatsapp" type="tel" inputmode="tel" required placeholder="(48) 99999-0000" maxlength="16">
-        </label>
-      </div>
 
-      <label class="consent">
-        <input id="consent" type="checkbox" required>
-        <span>Concordo com o tratamento dos meus dados pessoais conforme a <a class="link" onclick="openPolicy()">Política de Privacidade</a>.</span>
-      </label>
+        <div class="field">
+          <button id="submitBtn" class="btn">Salvar e iniciar quiz</button>
+        </div>
+      </form>
 
-      <div class="field">
-        <button id="submitBtn" class="btn">Salvar e iniciar quiz</button>
-      </div>
-    </form>
-
-    <div id="out" class="msg" hidden></div>
-  </div>
+      <div id="out" class="msg" hidden></div>
+    </div>
+  </main>
 
   <footer>
-    <div class="banner">Área do banner do Projeto Criciúma 100 Anos</div>
+    <div class="footer-inner">
+      <img src="assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos — banner oficial">
+    </div>
   </footer>
+</div>
 
-  <dialog id="policy">
-    <div class="modal-header">Política de Privacidade – Resumo</div>
-    <div class="modal-body">
-      Usaremos seu <strong>nome</strong>, <strong>cidade</strong> e <strong>WhatsApp</strong> para registrar sua participação, gerar e controlar o código de retirada da revista, e liberar o download do livro do Centenário. Não vendemos seus dados. O parceiro recebe apenas o <strong>código</strong>, sem seus dados pessoais.
-      <hr>
-      Para exercer seus direitos (LGPD), contate: contato@hnnoticias.com.br
-    </div>
-    <div class="modal-actions">
-      <button class="btn-outline" onclick="document.getElementById('policy').close()">Fechar</button>
-    </div>
-  </dialog>
+<dialog id="policy" style="border:0;border-radius:16px;padding:0;max-width:680px">
+  <div style="padding:12px 16px;border-bottom:1px solid #eee;font-weight:700">Política de Privacidade – Resumo</div>
+  <div style="padding:12px 16px;font-size:14px;line-height:1.4;max-height:55vh;overflow:auto">
+    Usaremos seu <strong>nome</strong>, <strong>cidade</strong> e <strong>WhatsApp</strong> para registrar sua participação, gerar e controlar o código de retirada da revista, e liberar o download do livro do Centenário. Não vendemos seus dados. O parceiro recebe apenas o <strong>código</strong>, sem seus dados pessoais.
+    <hr>
+    Para exercer seus direitos (LGPD), contate: contato@hnnoticias.com.br
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;border-top:1px solid #eee">
+    <button onclick="document.getElementById('policy').close()">Fechar</button>
+  </div>
+</dialog>
+
 <script>
   const PROJECT_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
 
-  function openPolicy() {
-    document.getElementById('policy').showModal();
-  }
+  function openPolicy(){ document.getElementById('policy').showModal(); }
 
-  // Máscara dinâmica para WhatsApp
+  // máscara whatsapp
   const wa = document.getElementById('whatsapp');
   wa.addEventListener('input', () => {
-    let v = wa.value.replace(/\D/g, '').slice(0, 11);
-    if (v.length >= 2) v = '(' + v.slice(0, 2) + ') ' + v.slice(2);
-    if (v.length >= 10) v = v.slice(0, 10) + '-' + v.slice(10);
+    let v = wa.value.replace(/\D/g,'').slice(0,11);
+    if(v.length>=2) v = '('+v.slice(0,2)+') '+v.slice(2);
+    if(v.length>=10) v = v.slice(0,10)+'-'+v.slice(10);
     wa.value = v;
   });
 
-  // Gera UUID v4
-  function uuidv4() {
-    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+  function uuidv4(){
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>
       (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
     );
   }
 
-  async function saveUser(e) {
+  async function saveUser(e){
     e.preventDefault();
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true;
+    const btn = document.getElementById('submitBtn'); btn.disabled = true;
 
     const nome = document.getElementById('nome').value.trim();
     const cidade = document.getElementById('cidade').value.trim();
     const whatsapp = document.getElementById('whatsapp').value.trim();
     const consent = document.getElementById('consent').checked;
 
-    if (!nome || !cidade || !whatsapp || !consent) {
+    if(!nome || !cidade || !whatsapp || !consent){
       alert('Preencha todos os campos e aceite a Política de Privacidade.');
-      btn.disabled = false;
-      return false;
+      btn.disabled = false; return false;
     }
 
-    const whatsapp_digits = whatsapp.replace(/\D/g, '');
+    const whatsapp_digits = whatsapp.replace(/\D/g,'');
     const id = uuidv4();
     const created_at = new Date().toISOString();
 
-    try {
-      const res = await fetch(PROJECT_URL + "/rest/v1/users", {
-        method: "POST",
-        headers: {
-          "apikey": ANON_KEY,
-          "Authorization": "Bearer " + ANON_KEY,
-          "Content-Type": "application/json",
-          "Prefer": "return=minimal"
+    try{
+      const res = await fetch(PROJECT_URL+"/rest/v1/users",{
+        method:"POST",
+        headers:{
+          "apikey":ANON_KEY,"Authorization":"Bearer "+ANON_KEY,
+          "Content-Type":"application/json","Prefer":"return=minimal"
         },
         body: JSON.stringify({ id, nome, cidade, whatsapp: whatsapp_digits, consent, created_at })
       });
+      if(!res.ok){ const t = await res.text(); throw new Error("Falha ao salvar ("+res.status+"): "+t); }
 
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error("Falha ao salvar (" + res.status + "): " + t);
-      }
-
-      // 🔑 Salva ID localmente para o quiz reconhecer
       localStorage.setItem('hn_user_id', id);
-
-      document.getElementById('out').hidden = false;
-      document.getElementById('out').textContent = "Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.";
-
-      // Redireciona após pequeno delay
-      setTimeout(() => {
-        window.location.href = "quiz.html";
-      }, 800);
-
-    } catch (err) {
+      const out = document.getElementById('out');
+      out.hidden = false; out.textContent = "Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.";
+      setTimeout(()=> window.location.href="quiz.html", 600);
+    }catch(err){
       alert(err.message);
-    } finally {
+    }finally{
       btn.disabled = false;
     }
     return false;
   }
-</script> 
+</script>
 </body>
 </html>
