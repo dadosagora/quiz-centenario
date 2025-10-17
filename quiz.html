@@ -5,60 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quiz do Centenário de Criciúma — HN Notícias</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
     :root{
-      --bg:#ffffff; --text:#111111; --muted:#555555;
-      --card:#ffffff; --border:#e9e9e9;
+      --bg:#ffffff; --text:#111; --muted:#555;
+      --card:#fff; --border:#e9e9e9;
       --gold:#c9a227; --gold-2:#b88900;
-      --ok:#17823b; --ok-bg:#e8f6ee;
-      --err:#b00020; --err-bg:#fdecee;
-      --opt:#ffffff; --opt-border:#dedede; --opt-hover:#cfcfcf;
-      --btn:#111111; --btn-text:#ffffff;
+      --ok:#17823b; --ok-bg:#e8f6ee; --err:#b00020; --err-bg:#fdecee;
+      --opt:#fff; --opt-border:#dedede; --opt-hover:#cfcfcf;
+      --btn:#111; --btn-text:#fff;
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .wrap{min-height:100dvh;display:flex;flex-direction:column}
-
-    /* Header claro com logo grande na linha inteira */
     header{border-bottom:1px solid var(--border);background:#fff}
     .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 8px}
     .logo-wrap{display:flex;justify-content:center}
     .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
     .head h1{margin:8px 0 0;text-align:center;font-size:clamp(18px,3.6vw,24px)}
 
-    main{width:min(980px,94vw);margin:22px auto;flex:1}
-    .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px}
-    .progress{display:flex;align-items:center;gap:8px;margin-bottom:16px;color:var(--muted);font-size:14px}
+    main{width:min(980px,94vw);margin:16px auto;flex:1}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+    .progress{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--muted);font-size:14px}
     .bar{flex:1;height:8px;background:#f1f1f1;border-radius:999px;overflow:hidden;border:1px solid #e6e6e6}
     .bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--gold-2),var(--gold));transition:width .25s}
-    .question{font-size:clamp(18px,2.6vw,22px);line-height:1.35;margin:8px 0 16px;font-weight:800}
-    .options{display:grid;gap:10px}
-    .opt{
-      display:flex;gap:12px;align-items:center;background:var(--opt);
-      border:1px solid var(--opt-border);border-radius:12px;padding:14px;cursor:pointer;
-      transition:border-color .15s, transform .05s
-    }
+    .question{font-size:clamp(18px,2.6vw,22px);line-height:1.35;margin:6px 0 12px;font-weight:800}
+    .options{display:grid;gap:8px}
+    .opt{display:flex;gap:10px;align-items:center;background:var(--opt);border:1px solid var(--opt-border);border-radius:12px;padding:12px;cursor:pointer;transition:border-color .15s,transform .05s}
     .opt:hover{border-color:var(--opt-hover);transform:translateY(-1px)}
     .opt.disabled{opacity:.6;pointer-events:none}
-    .badge{flex:0 0 auto;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:800;color:var(--gold-2);border:1px solid var(--border)}
-    .feedback{min-height:36px;margin:10px 2px 2px;font-weight:700;padding:10px;border-radius:10px;display:none}
+    .badge{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;color:var(--gold-2);border:1px solid var(--border)}
+    .feedback{min-height:32px;margin:8px 2px 2px;font-weight:700;padding:8px;border-radius:10px;display:none}
     .feedback.ok{display:block;color:var(--ok);background:var(--ok-bg);border:1px solid #cdebd8}
     .feedback.err{display:block;color:var(--err);background:var(--err-bg);border:1px solid #f6c9cf}
-    .actions{display:flex;gap:10px;justify-content:space-between;margin-top:14px}
-    .btn{appearance:none;border:1px solid var(--btn);background:var(--btn);color:var(--btn-text);border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}
-    .btn.secondary{background:#ffffff;color:#111;border:1px solid #cfcfcf}
+    .actions{display:flex;gap:8px;justify-content:space-between;margin-top:10px}
+    .btn{appearance:none;border:1px solid var(--btn);background:var(--btn);color:var(--btn-text);border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
+    .btn.secondary{background:#fff;color:#111;border:1px solid #cfcfcf}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
-    .final{text-align:center;padding:10px}
-    .btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:12px}
-    .voucher{margin:14px auto;padding:18px;border-radius:16px;border:1px dashed var(--gold-2);background:#fff;max-width:560px}
-    .voucher h3{margin:0 0 8px;font-size:22px;color:var(--gold-2)}
-    .code{font-size:clamp(22px,4.2vw,28px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:10px 14px;border-radius:12px;display:inline-block;margin:6px 0 0}
-    .note{color:var(--muted);font-size:14px;margin-top:8px}
+
+    .final{text-align:center;padding:6px}
+    .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+    .voucher{margin:10px auto;padding:14px;border-radius:16px;border:1px dashed var(--gold-2);background:#fff;max-width:560px}
+    .voucher h3{margin:0 0 6px;font-size:20px;color:var(--gold-2)}
+    .code{font-size:clamp(20px,4vw,26px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:8px 12px;border-radius:12px;display:inline-block;margin:6px 0 0}
+    .note{color:var(--muted);font-size:14px;margin-top:6px}
 
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
+
+    /* Compactar em telas baixas */
+    @media (max-height:760px){
+      .head{padding:8px 0 4px}
+      .logo-wrap img{max-width:360px}
+      .head h1{font-size:18px;margin-top:6px}
+      main{margin:10px auto}
+      .card{padding:12px}
+      .question{margin:4px 0 10px}
+      .opt{padding:10px}
+      .btn{padding:9px 12px}
+    }
   </style>
 </head>
 <body>
@@ -71,7 +76,7 @@
   </header>
 
   <main>
-    <div id="card" class="card">
+    <div class="card">
       <div class="progress" id="progressWrap" style="display:none">
         <span id="progressText">Pergunta 1</span>
         <div class="bar"><div id="progressBar"></div></div>
@@ -83,7 +88,7 @@
         <div id="feedback" class="feedback"></div>
         <div class="actions">
           <button class="btn secondary" id="btnSkip">Pular</button>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:8px;">
             <button class="btn secondary" id="btnTryAgain" disabled>Tentar novamente</button>
             <button class="btn" id="btnNext" disabled>Próxima</button>
           </div>
@@ -91,7 +96,7 @@
       </div>
 
       <div id="finalView" class="final" style="display:none">
-        <h2 style="margin:6px 0 8px;font-size:clamp(22px,4.2vw,28px)">Parabéns! Você concluiu o Quiz 🎉</h2>
+        <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
         <p>Apresente o seu código no parceiro para retirar a revista.</p>
 
         <div class="voucher">
@@ -107,7 +112,7 @@
           <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
         </div>
 
-        <p class="note" style="margin-top:14px;">Dica: tire um print desta tela e apresente no momento da retirada.</p>
+        <p class="note" style="margin-top:10px;">Dica: tire um print desta tela e apresente no momento da retirada.</p>
       </div>
     </div>
   </main>
@@ -120,13 +125,11 @@
 </div>
 
 <script>
-  // ==== CONFIG ====
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const MAX_QUESTIONS = 8;
-  const PDF_URL = ""; // coloque o link do livro
+  const PDF_URL = "";
 
-  // ==== Estado ====
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   const els = {
     progressWrap: document.getElementById('progressWrap'),
@@ -147,40 +150,37 @@
   };
 
   let userId = null, questions = [], index = 0, attemptsForCurrent = 0;
-
-  // ==== Utils ====
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
-  const fmtDateISO = (d)=>d.toISOString();
+  const fmtDateISO = d=>d.toISOString();
   const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
-  function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
-  function formatVoucherCode(){ const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join(""); return `HN100–${p(4)}-${p(4)}`; }
-  function normalizeKey(v){ const s=(v??'').toString().trim().toLowerCase(); const m=s.match(/[abcd]/); return m?m[0]:''; }
-  function normalizeText(t){ return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' '); }
+  function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+  function formatVoucherCode(){const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join("");return `HN100–${p(4)}-${p(4)}`;}
+  function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
+  function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  async function insertSubmission({ user_id, question_id, first_try_correct }){
-    const { error } = await client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
-    if(error) console.error('Erro ao gravar submission:', error);
+  async function insertSubmission({user_id,question_id,first_try_correct}){
+    const {error}=await client.from('submissions').insert({user_id,question_id,first_try_correct,answered_at:fmtDateISO(new Date())});
+    if(error)console.error('Erro ao gravar submission:',error);
   }
 
   async function ensureVoucher(user_id){
-    let code = formatVoucherCode(), issuedAt = new Date(), expiresAt = addDays(issuedAt,14);
+    let code=formatVoucherCode(),issuedAt=new Date(),expiresAt=addDays(issuedAt,14);
     for(let i=0;i<5;i++){
-      const { error } = await client.from('vouchers').insert({
-        user_id, code, status:'pendente', issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
-        partner:'Mina Wine Bar – Praça do Congresso'
-      });
-      if(!error) return { code, issuedAt, expiresAt };
-      if(String(error.message||'').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
-      console.error('Erro ao criar voucher:', error); break;
+      const {error}=await client.from('vouchers').insert({user_id,code,status:'pendente',issued_at:fmtDateISO(issuedAt),expires_at:fmtDateISO(expiresAt),partner:'Mina Wine Bar – Praça do Congresso'});
+      if(!error)return {code,issuedAt,expiresAt};
+      if(String(error.message||'').toLowerCase().includes('duplicate')){code=formatVoucherCode();continue;}
+      console.error('Erro ao criar voucher:',error);break;
     }
-    return { code, issuedAt, expiresAt };
+    return {code,issuedAt,expiresAt};
   }
 
   function updateProgress(){
-    const total = questions.length || 1;
-    els.progressWrap.style.display = 'flex';
+    const total = Math.max(questions.length,1);
+    els.progressWrap.style.display='flex';
     els.progressText.textContent = `Pergunta ${Math.min(index+1,total)} de ${total}`;
-    els.progressBar.style.width = `${(index/total)*100}%`;
+    // Barra agora reflete a pergunta atual (100% na última)
+    const pct = ((index+1)/total)*100;
+    els.progressBar.style.width = `${pct}%`;
   }
 
   function renderQuestion(){
@@ -194,106 +194,89 @@
 
     let correctKey = normalizeKey(q.correta);
     const optsRaw = [
-      { key:'a', label:'A', text:q.alternativa_a },
-      { key:'b', label:'B', text:q.alternativa_b },
-      { key:'c', label:'C', text:q.alternativa_c },
-      { key:'d', label:'D', text:q.alternativa_d },
+      {key:'a',label:'A',text:q.alternativa_a},
+      {key:'b',label:'B',text:q.alternativa_b},
+      {key:'c',label:'C',text:q.alternativa_c},
+      {key:'d',label:'D',text:q.alternativa_d},
     ];
-
     if(!['a','b','c','d'].includes(correctKey) && q.correta){
-      const target = normalizeText(q.correta);
-      const hit = optsRaw.find(o => normalizeText(o.text) === target);
-      if(hit) correctKey = hit.key;
+      const target=normalizeText(q.correta);
+      const hit=optsRaw.find(o=>normalizeText(o.text)===target);
+      if(hit) correctKey=hit.key;
     }
+    const opts = optsRaw.map(o=>({...o,isCorrect:o.key===correctKey}));
+    if(!opts.some(o=>o.isCorrect)){opts[0].isCorrect=true;console.warn('Pergunta sem correta definida:',q.id);}
 
-    const opts = optsRaw.map(o => ({ ...o, isCorrect: o.key === correctKey }));
-    if(!opts.some(o=>o.isCorrect)){ opts[0].isCorrect = true; console.warn('Pergunta sem correta definida:', q.id); }
-
-    els.options.innerHTML = '';
-    els.btnTryAgain.disabled = true;
-    els.btnNext.disabled = true;
+    els.options.innerHTML='';
+    els.btnTryAgain.disabled=true;
+    els.btnNext.disabled=true;
 
     for(const opt of opts){
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'opt';
-      btn.innerHTML = `<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
-      btn.addEventListener('click', async ()=>{
+      const btn=document.createElement('button');
+      btn.type='button'; btn.className='opt';
+      btn.innerHTML=`<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
+      btn.addEventListener('click',async()=>{
         attemptsForCurrent++;
         if(opt.isCorrect){
-          els.feedback.textContent = '✅ Resposta certa!';
-          els.feedback.className = 'feedback ok';
-          els.btnNext.disabled = false;
-          els.btnTryAgain.disabled = true;
-          await insertSubmission({ user_id:userId, question_id:q.id, first_try_correct: attemptsForCurrent===1 });
+          els.feedback.textContent='✅ Resposta certa!';
+          els.feedback.className='feedback ok';
+          els.btnNext.disabled=false; els.btnTryAgain.disabled=true;
+          await insertSubmission({user_id:userId,question_id:q.id,first_try_correct:attemptsForCurrent===1});
           disableOptions();
         }else{
-          els.feedback.textContent = '❌ Não é essa. Tente novamente.';
-          els.feedback.className = 'feedback err';
-          els.btnTryAgain.disabled = false;
+          els.feedback.textContent='❌ Não é essa. Tente novamente.';
+          els.feedback.className='feedback err';
+          els.btnTryAgain.disabled=false;
         }
       });
       els.options.appendChild(btn);
     }
   }
 
-  function disableOptions(){ [...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled')); }
-  function enableOptions(){ [...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled')); }
+  function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
+  function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
 
   async function loadQuestions(){
-    const { data, error } = await client
-      .from('questions')
+    const {data,error}=await client.from('questions')
       .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
-      .eq('ativa', true);
-    if(error){ console.error('Erro ao buscar perguntas:', error); return []; }
-    return shuffle(data || []).slice(0, MAX_QUESTIONS);
+      .eq('ativa',true);
+    if(error){console.error('Erro ao buscar perguntas:',error);return [];}
+    return shuffle(data||[]).slice(0,MAX_QUESTIONS);
   }
 
   async function showFinal(){
-    const voucher = await ensureVoucher(userId);
-    els.quizView.style.display = 'none';
-    els.finalView.style.display = 'block';
-    els.voucherCode.textContent = voucher.code;
-    els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
+    const voucher=await ensureVoucher(userId);
+    els.quizView.style.display='none';
+    els.finalView.style.display='block';
+    els.voucherCode.textContent=voucher.code;
+    els.voucherValidity.textContent=`Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
+    // Mostra a barra completa também no final
+    els.progressBar.style.width='100%';
 
     if(PDF_URL && /^https?:\/\//i.test(PDF_URL)){
-      els.btnDownload.href = PDF_URL;
-      els.btnDownload.removeAttribute('disabled');
-    } else {
-      els.btnDownload.href = '#';
-      els.btnDownload.setAttribute('disabled','true');
-      els.btnDownload.textContent = 'Baixar o livro (em breve)';
+      els.btnDownload.href=PDF_URL; els.btnDownload.removeAttribute('disabled');
+    }else{
+      els.btnDownload.href='#'; els.btnDownload.setAttribute('disabled','true');
+      els.btnDownload.textContent='Baixar o livro (em breve)';
     }
   }
 
-  // ==== Eventos ====
-  els.btnTryAgain.addEventListener('click', ()=>{
-    enableOptions(); els.feedback.textContent=''; els.feedback.className='feedback'; els.btnTryAgain.disabled=true;
-  });
-  els.btnNext.addEventListener('click', async ()=>{
-    index++; if(index>=questions.length){ await showFinal(); } else { renderQuestion(); }
-  });
-  els.btnSkip.addEventListener('click', async ()=>{
-    index++; if(index>=questions.length){ await showFinal(); } else { renderQuestion(); }
-  });
-  els.btnCopy.addEventListener('click', async ()=>{
-    const code = els.voucherCode.textContent.trim();
-    try{ await navigator.clipboard.writeText(code); els.btnCopy.textContent='Copiado!'; await wait(1200); }
-    catch(_){ els.btnCopy.textContent='Selecione e copie'; await wait(1200); }
-    els.btnCopy.textContent='Copiar código';
-  });
+  els.btnTryAgain.addEventListener('click',()=>{enableOptions();els.feedback.textContent='';els.feedback.className='feedback';els.btnTryAgain.disabled=true;});
+  els.btnNext.addEventListener('click',async()=>{index++; if(index>=questions.length){await showFinal();} else {renderQuestion();}});
+  els.btnSkip.addEventListener('click',async()=>{index++; if(index>=questions.length){await showFinal();} else {renderQuestion();}});
+  els.btnCopy.addEventListener('click',async()=>{const c=els.voucherCode.textContent.trim();try{await navigator.clipboard.writeText(c);els.btnCopy.textContent='Copiado!';await wait(1000);}catch(_){els.btnCopy.textContent='Selecione e copie';await wait(1000);}els.btnCopy.textContent='Copiar código';});
 
-  // ==== Boot ====
   (async function init(){
-    userId = localStorage.getItem('hn_user_id');
-    if(!userId){ window.location.href='signup.html'; return; }
-    questions = await loadQuestions();
+    userId=localStorage.getItem('hn_user_id');
+    if(!userId){window.location.href='signup.html';return;}
+    questions=await loadQuestions();
     if(!questions.length){
-      els.question.textContent = 'Nenhuma pergunta ativa encontrada no momento. Tente novamente mais tarde.';
-      els.options.innerHTML = ''; els.btnTryAgain.disabled = true; els.btnNext.disabled = true; els.btnSkip.disabled = true;
+      document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
+      document.getElementById('options').innerHTML='';
+      els.btnTryAgain.disabled=true; els.btnNext.disabled=true; els.btnSkip.disabled=true;
       return;
     }
-    index = 0; renderQuestion();
+    index=0; renderQuestion();
   })();
 </script>
 </body>
