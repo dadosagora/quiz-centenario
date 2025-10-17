@@ -53,7 +53,6 @@
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
 
-    /* Compactar em telas baixas */
     @media (max-height:760px){
       .head{padding:8px 0 4px}
       .logo-wrap img{max-width:360px}
@@ -96,10 +95,10 @@
       </div>
 
       <div id="finalView" class="final" style="display:none">
-        <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
-        <p>Apresente o seu código no parceiro para retirar a revista.</p>
+        <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
+        <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
 
-        <div class="voucher">
+        <div id="voucherBox" class="voucher">
           <h3>Seu código de retirada</h3>
           <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
           <div class="note" id="voucherValidity">Válido até —</div>
@@ -112,7 +111,12 @@
           <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
         </div>
 
-        <p class="note" style="margin-top:10px;">Dica: tire um print desta tela e apresente no momento da retirada.</p>
+        <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
+          <button class="btn" id="btnContinue">Continuar respondendo</button>
+          <a class="btn secondary" href="index.html">Encerrar</a>
+        </div>
+
+        <p class="note" id="answeredCount" style="margin-top:10px;"></p>
       </div>
     </div>
   </main>
@@ -125,12 +129,15 @@
 </div>
 
 <script>
+  // === CONFIG ===
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  const MAX_QUESTIONS = 8;
-  const PDF_URL = "";
+  const PDF_URL = "";      // link do livro se já tiver
+  const BATCH_SIZE = 10;   // 10 por “lote”
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  // === Estado ===
   const els = {
     progressWrap: document.getElementById('progressWrap'),
     progressText: document.getElementById('progressText'),
@@ -143,55 +150,75 @@
     btnSkip: document.getElementById('btnSkip'),
     quizView: document.getElementById('quizView'),
     finalView: document.getElementById('finalView'),
+    voucherBox: document.getElementById('voucherBox'),
     voucherCode: document.getElementById('voucherCode'),
     voucherValidity: document.getElementById('voucherValidity'),
     btnDownload: document.getElementById('btnDownload'),
     btnCopy: document.getElementById('btnCopy'),
+    btnContinue: document.getElementById('btnContinue'),
+    continueRow: document.getElementById('continueRow'),
+    finalTitle: document.getElementById('finalTitle'),
+    finalSubtitle: document.getElementById('finalSubtitle'),
+    answeredCount: document.getElementById('answeredCount'),
   };
 
-  let userId = null, questions = [], index = 0, attemptsForCurrent = 0;
+  let userId = null;
+  let allQuestions = [];       // todas as ativas
+  let answeredTotal = 0;       // acumulado de respondidas (acertos)
+  let askedIds = new Set();    // ids já apresentados (para não repetir)
+  let voucherIssued = false;   // só na primeira vez
+
+  // estado do lote atual
+  let batch = [];              // perguntas deste lote
+  let idxInBatch = 0;          // índice dentro do lote
+
+  // === Utils ===
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
-  const fmtDateISO = d=>d.toISOString();
+  const fmtDateISO = (d)=>d.toISOString();
   const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
   function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
   function formatVoucherCode(){const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join("");return `HN100–${p(4)}-${p(4)}`;}
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  async function insertSubmission({user_id,question_id,first_try_correct}){
-    const {error}=await client.from('submissions').insert({user_id,question_id,first_try_correct,answered_at:fmtDateISO(new Date())});
-    if(error)console.error('Erro ao gravar submission:',error);
+  async function insertSubmission({ user_id, question_id, first_try_correct }){
+    const { error } = await client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
+    if(error) console.error('Erro ao gravar submission:', error);
   }
 
   async function ensureVoucher(user_id){
-    let code=formatVoucherCode(),issuedAt=new Date(),expiresAt=addDays(issuedAt,14);
+    let code = formatVoucherCode(), issuedAt = new Date(), expiresAt = addDays(issuedAt,14);
     for(let i=0;i<5;i++){
-      const {error}=await client.from('vouchers').insert({user_id,code,status:'pendente',issued_at:fmtDateISO(issuedAt),expires_at:fmtDateISO(expiresAt),partner:'Mina Wine Bar – Praça do Congresso'});
-      if(!error)return {code,issuedAt,expiresAt};
-      if(String(error.message||'').toLowerCase().includes('duplicate')){code=formatVoucherCode();continue;}
-      console.error('Erro ao criar voucher:',error);break;
+      const { error } = await client.from('vouchers').insert({
+        user_id, code, status:'pendente', issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
+        partner:'Mina Wine Bar – Praça do Congresso'
+      });
+      if(!error) return { code, issuedAt, expiresAt };
+      if(String(error.message||'').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
+      console.error('Erro ao criar voucher:', error); break;
     }
-    return {code,issuedAt,expiresAt};
+    return { code, issuedAt, expiresAt };
   }
 
   function updateProgress(){
-    const total = Math.max(questions.length,1);
+    const total = Math.max(batch.length,1);
     els.progressWrap.style.display='flex';
-    els.progressText.textContent = `Pergunta ${Math.min(index+1,total)} de ${total}`;
-    // Barra agora reflete a pergunta atual (100% na última)
-    const pct = ((index+1)/total)*100;
+    els.progressText.textContent = `Pergunta ${Math.min(idxInBatch+1,total)} de ${total}`;
+    const pct = ((idxInBatch+1)/total)*100;
     els.progressBar.style.width = `${pct}%`;
   }
 
   function renderQuestion(){
-    const q = questions[index];
-    attemptsForCurrent = 0;
+    const q = batch[idxInBatch];
     updateProgress();
 
     els.question.textContent = q.enunciado;
     els.feedback.textContent = '';
     els.feedback.className = 'feedback';
+    els.btnTryAgain.disabled = true;
+    els.btnNext.disabled = true;
 
+    // correta pode vir como a/b/c/d OU como o texto da alternativa
     let correctKey = normalizeKey(q.correta);
     const optsRaw = [
       {key:'a',label:'A',text:q.alternativa_a},
@@ -208,20 +235,21 @@
     if(!opts.some(o=>o.isCorrect)){opts[0].isCorrect=true;console.warn('Pergunta sem correta definida:',q.id);}
 
     els.options.innerHTML='';
-    els.btnTryAgain.disabled=true;
-    els.btnNext.disabled=true;
-
     for(const opt of opts){
       const btn=document.createElement('button');
       btn.type='button'; btn.className='opt';
       btn.innerHTML=`<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
-      btn.addEventListener('click',async()=>{
-        attemptsForCurrent++;
+      let attempts = 0;
+      btn.addEventListener('click', async ()=>{
+        attempts++;
         if(opt.isCorrect){
           els.feedback.textContent='✅ Resposta certa!';
           els.feedback.className='feedback ok';
-          els.btnNext.disabled=false; els.btnTryAgain.disabled=true;
-          await insertSubmission({user_id:userId,question_id:q.id,first_try_correct:attemptsForCurrent===1});
+          els.btnNext.disabled=false;
+          els.btnTryAgain.disabled=true;
+          askedIds.add(q.id);
+          answeredTotal++;
+          await insertSubmission({ user_id:userId, question_id:q.id, first_try_correct: attempts===1 });
           disableOptions();
         }else{
           els.feedback.textContent='❌ Não é essa. Tente novamente.';
@@ -236,47 +264,110 @@
   function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
   function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
 
-  async function loadQuestions(){
-    const {data,error}=await client.from('questions')
-      .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
-      .eq('ativa',true);
-    if(error){console.error('Erro ao buscar perguntas:',error);return [];}
-    return shuffle(data||[]).slice(0,MAX_QUESTIONS);
-  }
+  function startBatch(){
+    // pega as próximas não usadas
+    const remaining = allQuestions.filter(q => !askedIds.has(q.id));
+    batch = remaining.slice(0, BATCH_SIZE);
+    idxInBatch = 0;
 
-  async function showFinal(){
-    const voucher=await ensureVoucher(userId);
-    els.quizView.style.display='none';
-    els.finalView.style.display='block';
-    els.voucherCode.textContent=voucher.code;
-    els.voucherValidity.textContent=`Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
-    // Mostra a barra completa também no final
-    els.progressBar.style.width='100%';
-
-    if(PDF_URL && /^https?:\/\//i.test(PDF_URL)){
-      els.btnDownload.href=PDF_URL; els.btnDownload.removeAttribute('disabled');
-    }else{
-      els.btnDownload.href='#'; els.btnDownload.setAttribute('disabled','true');
-      els.btnDownload.textContent='Baixar o livro (em breve)';
-    }
-  }
-
-  els.btnTryAgain.addEventListener('click',()=>{enableOptions();els.feedback.textContent='';els.feedback.className='feedback';els.btnTryAgain.disabled=true;});
-  els.btnNext.addEventListener('click',async()=>{index++; if(index>=questions.length){await showFinal();} else {renderQuestion();}});
-  els.btnSkip.addEventListener('click',async()=>{index++; if(index>=questions.length){await showFinal();} else {renderQuestion();}});
-  els.btnCopy.addEventListener('click',async()=>{const c=els.voucherCode.textContent.trim();try{await navigator.clipboard.writeText(c);els.btnCopy.textContent='Copiado!';await wait(1000);}catch(_){els.btnCopy.textContent='Selecione e copie';await wait(1000);}els.btnCopy.textContent='Copiar código';});
-
-  (async function init(){
-    userId=localStorage.getItem('hn_user_id');
-    if(!userId){window.location.href='signup.html';return;}
-    questions=await loadQuestions();
-    if(!questions.length){
-      document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
-      document.getElementById('options').innerHTML='';
-      els.btnTryAgain.disabled=true; els.btnNext.disabled=true; els.btnSkip.disabled=true;
+    // se não há mais perguntas, só mostra final “acabou”
+    if(batch.length === 0){
+      showFinal({ noMore:true });
       return;
     }
-    index=0; renderQuestion();
+
+    els.quizView.style.display = 'block';
+    els.finalView.style.display = 'none';
+    renderQuestion();
+  }
+
+  async function loadAllQuestions(){
+    const { data, error } = await client
+      .from('questions')
+      .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
+      .eq('ativa', true);
+    if(error){ console.error('Erro ao buscar perguntas:', error); return []; }
+    return shuffle(data || []);
+  }
+
+  async function showFinal({ noMore=false } = {}){
+    els.quizView.style.display = 'none';
+    els.finalView.style.display = 'block';
+
+    // voucher apenas no primeiro lote concluído
+    if(!voucherIssued){
+      const voucher = await ensureVoucher(userId);
+      els.voucherCode.textContent = voucher.code;
+      els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
+      voucherIssued = true;
+      els.voucherBox.style.display = 'block';
+      els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
+      els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar a revista.';
+    }else{
+      // nos lotes seguintes, não gerar novo voucher
+      els.voucherBox.style.display = 'none';
+      els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
+      els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
+    }
+
+    const totalAtivas = allQuestions.length;
+    els.answeredCount.textContent = `Você já respondeu ${answeredTotal} de ${totalAtivas} perguntas disponíveis.`;
+
+    // exibe “Continuar” apenas se há mais perguntas
+    const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
+    els.continueRow.style.display = (!noMore && remaining > 0) ? 'flex' : 'none';
+
+    // barra completa no final
+    els.progressBar.style.width = '100%';
+
+    // botões
+    els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
+    if(!(PDF_URL && /^https?:\/\//i.test(PDF_URL))){
+      els.btnDownload.setAttribute('disabled','true');
+      els.btnDownload.textContent = 'Baixar o livro (em breve)';
+    } else {
+      els.btnDownload.removeAttribute('disabled');
+      els.btnDownload.textContent = 'Baixar o livro';
+    }
+  }
+
+  // === Eventos ===
+  els.btnTryAgain.addEventListener('click',()=>{enableOptions();els.feedback.textContent='';els.feedback.className='feedback';els.btnTryAgain.disabled=true;});
+  els.btnNext.addEventListener('click',async()=>{
+    idxInBatch++;
+    if(idxInBatch >= batch.length){ await showFinal(); }
+    else { renderQuestion(); }
+  });
+  els.btnSkip.addEventListener('click',async()=>{
+    // pular: não grava submission e segue
+    const q = batch[idxInBatch];
+    askedIds.add(q.id); // ainda assim marque como “vista” para não repetir
+    idxInBatch++;
+    if(idxInBatch >= batch.length){ await showFinal(); }
+    else { renderQuestion(); }
+  });
+  els.btnCopy.addEventListener('click',async()=>{
+    const code = els.voucherCode.textContent.trim();
+    try{ await navigator.clipboard.writeText(code); els.btnCopy.textContent='Copiado!'; await wait(1000); }
+    catch(_){ els.btnCopy.textContent='Selecione e copie'; await wait(1000); }
+    els.btnCopy.textContent='Copiar código';
+  });
+  els.btnContinue.addEventListener('click', ()=> startBatch());
+
+  // === Boot ===
+  (async function init(){
+    userId = localStorage.getItem('hn_user_id');
+    if(!userId){ window.location.href='signup.html'; return; }
+
+    allQuestions = await loadAllQuestions();
+    if(!allQuestions.length){
+      els.question.textContent = 'Nenhuma pergunta ativa encontrada no momento. Tente novamente mais tarde.';
+      els.options.innerHTML = '';
+      els.btnTryAgain.disabled = true; els.btnNext.disabled = true; els.btnSkip.disabled = true;
+      return;
+    }
+
+    startBatch();
   })();
 </script>
 </body>
