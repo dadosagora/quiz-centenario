@@ -38,28 +38,32 @@
 </div>
 
 <script>
-  // ✅ base correta das Edge Functions (pública)
-  const FUNCTIONS_BASE = "https://fpstwfzqvactvlgwgagu.functions.supabase.co";
+  // Endpoint público da sua Edge Function
+  const ADMIN_LOGIN_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/admin-login";
 
-  // Contrato esperado (admin-login):
-  // Request: { user: string, pass: string }
-  // Response 200: { ok:true, token:string, name:string }
-  // Response 401: { ok:false, error:"invalid" }
+  // Chave ANON pública do projeto (pode usar no front)
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+
   async function adminLogin(user, pass){
-    const res = await fetch(FUNCTIONS_BASE + "/admin-login", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+    const res = await fetch(ADMIN_LOGIN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // ✅ Obrigatórios para chamar Edge Functions
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "apikey": SUPABASE_ANON_KEY
+      },
       body: JSON.stringify({ user, pass })
     });
     const data = await res.json().catch(()=> ({}));
-    if(!res.ok || !data.ok) throw new Error(data.error || "Falha no login");
+    if (!res.ok || !data.ok) throw new Error(data.error || "Falha no login");
     return data;
   }
 
   document.getElementById('btnLogin').addEventListener('click', async ()=>{
     const user = (document.getElementById('user').value || "").trim();
     const pass = (document.getElementById('pass').value || "").trim();
-    const msg = document.getElementById('msg'); msg.style.display='none';
+    const msg  = document.getElementById('msg'); msg.style.display = 'none';
 
     try{
       const { token, name } = await adminLogin(user, pass);
@@ -68,7 +72,7 @@
       window.location.href = "index.html";
     }catch(err){
       msg.textContent = "Usuário ou senha inválidos.";
-      msg.style.display='block';
+      msg.style.display = 'block';
     }
   });
 </script>
