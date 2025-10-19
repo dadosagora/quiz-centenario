@@ -283,22 +283,31 @@
     const opts = optsRaw.map(o=>({...o,isCorrect:o.key===correctKey}));
     if(!opts.some(o=>o.isCorrect)){opts[0].isCorrect=true;console.warn('Pergunta sem correta definida:',q.id);}
 
+    // 🔧 Correção: uma contagem única por PERGUNTA
+    let attemptsForThisQuestion = 0;
+
     els.options.innerHTML='';
     for(const opt of opts){
       const btn=document.createElement('button');
       btn.type='button'; btn.className='opt';
       btn.innerHTML=`<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
-      let attempts = 0;
+
       btn.addEventListener('click', async ()=>{
-        attempts++;
+        // Conta qualquer clique (certo ou errado)
+        attemptsForThisQuestion++;
+
         if(opt.isCorrect){
           els.feedback.textContent='✅ Resposta certa!';
           els.feedback.className='feedback ok';
           els.btnNext.disabled=false;
           els.btnTryAgain.disabled=true;
+
           askedIds.add(q.id);
           answeredTotal++;
-          await insertSubmission({ user_id:userId, question_id:q.id, first_try_correct: attempts===1 });
+
+          const firstTry = (attemptsForThisQuestion === 1);
+          await insertSubmission({ user_id:userId, question_id:q.id, first_try_correct: firstTry });
+
           disableOptions();
         }else{
           els.feedback.textContent='❌ Não é essa. Tente novamente.';
@@ -306,6 +315,7 @@
           els.btnTryAgain.disabled=false;
         }
       });
+
       els.options.appendChild(btn);
     }
   }
