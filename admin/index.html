@@ -490,5 +490,118 @@
   switchTab('dash');
   efKpis();
 </script>
+  <!-- === Admin API Helper === -->
+<script>
+  // Base das Edge Functions (o mesmo endpoint do Supabase)
+  const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
+  // ANON KEY do projeto
+  const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+  // token de admin salvo no login
+  const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
+
+  if (!ADMIN_TOKEN) {
+    window.location.href = "login.html";
+  }
+
+  async function callApi(endpoint, payload) {
+    const res = await fetch(`${FN_BASE}/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + ANON, // exigido pelo gateway
+        "apikey": ANON,                     // idem
+        "x-admin-token": ADMIN_TOKEN,       // token de admin
+      },
+      cache: "no-store",
+      body: JSON.stringify(payload || {})
+    });
+
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+
+    if (!res.ok || !data.ok) {
+      const msg = data?.error || `${res.status} ${res.statusText}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // API global do painel
+  window.AdminAPI = {
+    // Perguntas
+    listQuestions: (filters = {}) => callApi("admin-questions", { action: "list", filters }),
+    saveQuestion: (item) => callApi("admin-questions", { action: "upsert", item }),
+    deleteQuestion: (id) => callApi("admin-questions", { action: "delete", id }),
+
+    // Participantes
+    listParticipants: (search = "") => callApi("admin-participants", { action: "list", search }),
+
+    // Vouchers
+    listVouchers: ({ search = "", status = "" } = {}) =>
+      callApi("admin-vouchers", { action: "list", search, status }),
+    redeemVoucher: (id) => callApi("admin-vouchers", { action: "redeem", id }),
+  };
+
+  // 💡 teste rápido:
+  // AdminAPI.listParticipants().then(console.log).catch(console.error);
+</script>
+<!-- === /Admin API Helper === -->
+<!-- === Admin API Helper === -->
+<script>
+  // Base das Edge Functions (o mesmo endpoint do Supabase)
+  const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
+  // ANON KEY do projeto
+  const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+  // token de admin salvo no login
+  const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
+
+  if (!ADMIN_TOKEN) {
+    window.location.href = "login.html";
+  }
+
+  async function callApi(endpoint, payload) {
+    const res = await fetch(`${FN_BASE}/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + ANON, // exigido pelo gateway
+        "apikey": ANON,                     // idem
+        "x-admin-token": ADMIN_TOKEN,       // token de admin
+      },
+      cache: "no-store",
+      body: JSON.stringify(payload || {})
+    });
+
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+
+    if (!res.ok || !data.ok) {
+      const msg = data?.error || `${res.status} ${res.statusText}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // API global do painel
+  window.AdminAPI = {
+    // Perguntas
+    listQuestions: (filters = {}) => callApi("admin-questions", { action: "list", filters }),
+    saveQuestion: (item) => callApi("admin-questions", { action: "upsert", item }),
+    deleteQuestion: (id) => callApi("admin-questions", { action: "delete", id }),
+
+    // Participantes
+    listParticipants: (search = "") => callApi("admin-participants", { action: "list", search }),
+
+    // Vouchers
+    listVouchers: ({ search = "", status = "" } = {}) =>
+      callApi("admin-vouchers", { action: "list", search, status }),
+    redeemVoucher: (id) => callApi("admin-vouchers", { action: "redeem", id }),
+  };
+
+  // 💡 teste rápido:
+  // AdminAPI.listParticipants().then(console.log).catch(console.error);
+</script>
+<!-- === /Admin API Helper === -->
+
 </body>
 </html>
