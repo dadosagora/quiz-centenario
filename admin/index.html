@@ -197,16 +197,16 @@
 </dialog>
 
 <script>
-  // ====== CONFIG ======
-  const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
-  const FUNCTIONS_BASE = SUPABASE_URL + "/functions/v1";
-
-  // ====== AUTENTICAÇÃO BÁSICA (token em localStorage) ======
+  // ====== AUTENTICAÇÃO (token em localStorage) ======
   const token = localStorage.getItem('hn_admin_token');
   if(!token){ window.location.href = "login.html"; }
 
   document.getElementById('who').textContent = "Logado como " + (localStorage.getItem('hn_admin_name') || "Admin");
-  document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('hn_admin_token'); localStorage.removeItem('hn_admin_name'); window.location.href="login.html"; };
+  document.getElementById('logout').onclick = ()=>{
+    localStorage.removeItem('hn_admin_token');
+    localStorage.removeItem('hn_admin_name');
+    window.location.href="login.html";
+  };
 
   // ====== HELPERS ======
   const $ = (id)=>document.getElementById(id);
@@ -219,63 +219,10 @@
     const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
     URL.revokeObjectURL(url);
   }
-
-  // ====== EDGE FUNCTIONS – CONTRATOS ======
-  // 1) /admin-questions
-  //    { action: "list", filters? { search, categoria, dificuldade } }
-  //    -> { ok:true, items:[{id,enunciado,alternativa_a,...,correta,ativa,categoria,dificuldade,acertos_primeira,total_acertos}] }
-  //    { action: "upsert", item:{...} } -> { ok:true, id }
-  //    { action: "delete", id } -> { ok:true }
-  async function efQuestions(payload){
-    const res = await fetch(FUNCTIONS_BASE+"/admin-questions",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json().catch(()=>({}));
-    if(!res.ok || !data.ok) throw new Error(data.error || "Falha em admin-questions");
-    return data;
-  }
-
-  // 2) /admin-participants
-  //    { action:"list", search? } -> { ok:true, items:[{id,nome,cidade,whatsapp,created_at}] }
-  async function efParticipants(payload){
-    const res = await fetch(FUNCTIONS_BASE+"/admin-participants",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json().catch(()=>({}));
-    if(!res.ok || !data.ok) throw new Error(data.error || "Falha em admin-participants");
-    return data;
-  }
-
-  // 3) /admin-vouchers
-  //    { action:"list", search?, status? } -> { ok:true, items:[{id,code,status,issued_at,expires_at,redeemed_at,partner,user:{nome,cidade}}] }
-  //    { action:"redeem", id } -> { ok:true }
-  async function efVouchers(payload){
-    const res = await fetch(FUNCTIONS_BASE+"/admin-vouchers",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json().catch(()=>({}));
-    if(!res.ok || !data.ok) throw new Error(data.error || "Falha em admin-vouchers");
-    return data;
-  }
-
-  // 4) KPIs rápidos – você pode implementar como agregações na mesma /admin-questions ou criar /admin-kpis
-  async function efKpis(){
-    // opcional: implemente uma função dedicada; aqui reuso list sem filtros e calculo simples no cliente
-    try{
-      const qs = await efQuestions({ action:"list" });
-      const totPerg = qs.items.length;
-      const ativas = qs.items.filter(i=>i.ativa).length;
-      $('kpis').textContent = `Perguntas ativas: ${ativas} / Total: ${totPerg}`;
-    }catch{
-      $('kpis').textContent = '—';
-    }
-  }
+  function esc(s){ return String(s??'').replace(/[<>&"]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c])); }
+  function formatDate(d){ if(!d) return ''; const dt = new Date(d); return dt.toLocaleString('pt-BR'); }
+  function badgeStatus(s){ const map = {pendente:'A retirar', retirado:'Retirado', expirado:'Expirado'}; return `<span class="chip">${map[s]||s}</span>`; }
+  function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
   // ====== TABS ======
   const tabs = document.querySelectorAll('.tab');
@@ -289,11 +236,66 @@
     if(tab==='participants') loadParticipants();
     if(tab==='vouchers') loadVouchers();
   }
+</script>
+
+<!-- === Admin API Helper (único) === -->
+<script>
+  const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
+  const ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+  const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
+  if (!ADMIN_TOKEN) window.location.href = "login.html";
+
+  async function callApi(endpoint, payload) {
+    const res = await fetch(`${FN_BASE}/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + ANON,
+        "apikey": ANON,
+        "x-admin-token": ADMIN_TOKEN,
+      },
+      cache: "no-store",
+      body: JSON.stringify(payload || {})
+    });
+    let data = {};
+    try { data = await res.json(); } catch(_) {}
+    if (!res.ok || !data.ok) {
+      const msg = data?.error || `${res.status} ${res.statusText}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  window.AdminAPI = {
+    listQuestions : (filters={}) => callApi("admin-questions",  { action:"list",   filters }),
+    saveQuestion  : (item)       => callApi("admin-questions",  { action:"upsert", item }),
+    deleteQuestion: (id)         => callApi("admin-questions",  { action:"delete", id }),
+
+    listParticipants: (search="") => callApi("admin-participants",{ action:"list",  search }),
+
+    listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
+    redeemVoucher: (id) => callApi("admin-vouchers",{ action:"redeem", id }),
+  };
+</script>
+<!-- === /Admin API Helper === -->
+
+<script>
+  // ====== KPIs ======
+  async function efKpis(){
+    try{
+      const { items } = await AdminAPI.listQuestions({});
+      const totPerg = items.length;
+      const ativas = items.filter(i=>i.ativa).length;
+      $('kpis').textContent = `Perguntas ativas: ${ativas} / Total: ${totPerg}`;
+    }catch{
+      $('kpis').textContent = '—';
+    }
+  }
 
   // ====== PERGUNTAS (CRUD) ======
   const qBody = $('q-table').querySelector('tbody');
   const qEmpty = $('q-empty');
-  $('q-new').onclick = ()=> openQ();  // novo
+  $('q-new').onclick = ()=> openQ();
 
   $('q-search').addEventListener('input', debounce(loadQuestions, 300));
   $('q-filter-cat').addEventListener('change', loadQuestions);
@@ -307,8 +309,7 @@
         categoria: $('q-filter-cat').value || undefined,
         dificuldade: $('q-filter-dif').value || undefined
       };
-      const { items } = await efQuestions({ action:"list", filters });
-      // popular filtros dinâmicos
+      const { items } = await AdminAPI.listQuestions(filters);
       fillSelectUnique(items, 'categoria', $('q-filter-cat'));
       fillSelectUnique(items, 'dificuldade', $('q-filter-dif'));
 
@@ -375,12 +376,11 @@
       categoria: $('f-cat').value.trim(),
       dificuldade: $('f-dif').value.trim()
     };
-    // valida simples
     if(!item.enunciado || !item.alternativa_a || !item.alternativa_b || !item.alternativa_c || !item.alternativa_d){
       alert('Preencha enunciado e todas as alternativas.'); return;
     }
     try{
-      await efQuestions({ action:"upsert", item });
+      await AdminAPI.saveQuestion(item);
       closeQ();
       loadQuestions();
     }catch(err){
@@ -391,7 +391,7 @@
   async function deleteQ(id){
     if(!confirm('Excluir esta pergunta?')) return;
     try{
-      await efQuestions({ action:"delete", id });
+      await AdminAPI.deleteQuestion(id);
       loadQuestions();
     }catch(err){
       alert('Erro ao excluir: ' + err.message);
@@ -409,7 +409,7 @@
     pBody.innerHTML = '<tr><td colspan="4">Carregando…</td></tr>';
     try{
       const search = $('p-search').value.trim() || undefined;
-      const { items } = await efParticipants({ action:"list", search });
+      const { items } = await AdminAPI.listParticipants(search || "");
       if(!items.length){ pBody.innerHTML=''; pEmpty.style.display='block'; return; }
       pEmpty.style.display='none';
       pBody.innerHTML = items.map(u => `
@@ -420,7 +420,6 @@
           <td>${formatDate(u.created_at)}</td>
         </tr>
       `).join('');
-      // guarda os últimos para export
       pBody.dataset.rows = JSON.stringify(items);
     }catch(err){
       pBody.innerHTML = `<tr><td colspan="4" class="warn">Erro: ${esc(err.message)}</td></tr>`;
@@ -444,9 +443,9 @@
   async function loadVouchers(){
     vBody.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
     try{
-      const search = $('v-search').value.trim() || undefined;
-      const status = $('v-status').value || undefined;
-      const { items } = await efVouchers({ action:"list", search, status });
+      const search = $('v-search').value.trim() || "";
+      const status = $('v-status').value || "";
+      const { items } = await AdminAPI.listVouchers({ search, status });
       if(!items.length){ vBody.innerHTML=''; vEmpty.style.display='block'; return; }
       vEmpty.style.display='none';
       vBody.innerHTML = items.map(v => `
@@ -457,9 +456,7 @@
           <td>${badgeStatus(v.status)}</td>
           <td>${formatDate(v.issued_at)}</td>
           <td>${formatDate(v.expires_at)}</td>
-          <td>
-            ${v.status==='pendente' ? `<button class="btn" onclick="markRedeemed('${v.id}')">Validar retirada</button>` : ''}
-          </td>
+          <td>${v.status==='pendente' ? `<button class="btn" onclick="markRedeemed('${v.id}')">Validar retirada</button>` : ''}</td>
         </tr>
       `).join('');
     }catch(err){
@@ -470,138 +467,16 @@
   async function markRedeemed(id){
     if(!confirm('Confirmar validação de retirada?')) return;
     try{
-      await efVouchers({ action:"redeem", id });
+      await AdminAPI.redeemVoucher(id);
       loadVouchers();
     }catch(err){
       alert('Erro ao validar: '+err.message);
     }
   }
 
-  // ====== UTILS ======
-  function esc(s){ return String(s??'').replace(/[<>&"]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c])); }
-  function formatDate(d){ if(!d) return ''; const dt = new Date(d); return dt.toLocaleString('pt-BR'); }
-  function badgeStatus(s){
-    const map = {pendente:'A retirar', retirado:'Retirado', expirado:'Expirado'};
-    return `<span class="chip">${map[s]||s}</span>`;
-    }
-  function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t = setTimeout(()=>fn(...a), ms); }; }
-
   // ====== BOOT ======
   switchTab('dash');
   efKpis();
 </script>
-  <!-- === Admin API Helper === -->
-<script>
-  // Base das Edge Functions (o mesmo endpoint do Supabase)
-  const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
-  // ANON KEY do projeto
-  const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  // token de admin salvo no login
-  const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
-
-  if (!ADMIN_TOKEN) {
-    window.location.href = "login.html";
-  }
-
-  async function callApi(endpoint, payload) {
-    const res = await fetch(`${FN_BASE}/${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + ANON, // exigido pelo gateway
-        "apikey": ANON,                     // idem
-        "x-admin-token": ADMIN_TOKEN,       // token de admin
-      },
-      cache: "no-store",
-      body: JSON.stringify(payload || {})
-    });
-
-    let data = {};
-    try { data = await res.json(); } catch (_) {}
-
-    if (!res.ok || !data.ok) {
-      const msg = data?.error || `${res.status} ${res.statusText}`;
-      throw new Error(msg);
-    }
-    return data;
-  }
-
-  // API global do painel
-  window.AdminAPI = {
-    // Perguntas
-    listQuestions: (filters = {}) => callApi("admin-questions", { action: "list", filters }),
-    saveQuestion: (item) => callApi("admin-questions", { action: "upsert", item }),
-    deleteQuestion: (id) => callApi("admin-questions", { action: "delete", id }),
-
-    // Participantes
-    listParticipants: (search = "") => callApi("admin-participants", { action: "list", search }),
-
-    // Vouchers
-    listVouchers: ({ search = "", status = "" } = {}) =>
-      callApi("admin-vouchers", { action: "list", search, status }),
-    redeemVoucher: (id) => callApi("admin-vouchers", { action: "redeem", id }),
-  };
-
-  // 💡 teste rápido:
-  // AdminAPI.listParticipants().then(console.log).catch(console.error);
-</script>
-<!-- === /Admin API Helper === -->
-<!-- === Admin API Helper === -->
-<script>
-  // Base das Edge Functions (o mesmo endpoint do Supabase)
-  const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
-  // ANON KEY do projeto
-  const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  // token de admin salvo no login
-  const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
-
-  if (!ADMIN_TOKEN) {
-    window.location.href = "login.html";
-  }
-
-  async function callApi(endpoint, payload) {
-    const res = await fetch(`${FN_BASE}/${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + ANON, // exigido pelo gateway
-        "apikey": ANON,                     // idem
-        "x-admin-token": ADMIN_TOKEN,       // token de admin
-      },
-      cache: "no-store",
-      body: JSON.stringify(payload || {})
-    });
-
-    let data = {};
-    try { data = await res.json(); } catch (_) {}
-
-    if (!res.ok || !data.ok) {
-      const msg = data?.error || `${res.status} ${res.statusText}`;
-      throw new Error(msg);
-    }
-    return data;
-  }
-
-  // API global do painel
-  window.AdminAPI = {
-    // Perguntas
-    listQuestions: (filters = {}) => callApi("admin-questions", { action: "list", filters }),
-    saveQuestion: (item) => callApi("admin-questions", { action: "upsert", item }),
-    deleteQuestion: (id) => callApi("admin-questions", { action: "delete", id }),
-
-    // Participantes
-    listParticipants: (search = "") => callApi("admin-participants", { action: "list", search }),
-
-    // Vouchers
-    listVouchers: ({ search = "", status = "" } = {}) =>
-      callApi("admin-vouchers", { action: "list", search, status }),
-    redeemVoucher: (id) => callApi("admin-vouchers", { action: "redeem", id }),
-  };
-
-  // 💡 teste rápido:
-  // AdminAPI.listParticipants().then(console.log).catch(console.error);
-</script>
-<!-- === /Admin API Helper === -->
-
 </body>
 </html>
