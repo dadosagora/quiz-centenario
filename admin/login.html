@@ -15,7 +15,8 @@
     label span{display:block;font-size:14px;font-weight:700;margin:10px 0 6px}
     input{width:100%;padding:12px;border:1px solid #ddd;border-radius:12px;font-size:16px}
     .btn{margin-top:14px;width:100%;padding:12px 14px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:800;cursor:pointer}
-    .msg{margin-top:10px;padding:10px;border-radius:10px;background:#fdecee;color:#b00020;border:1px solid #f6c9cf;display:none}
+    .btn[disabled]{opacity:.6;cursor:not-allowed}
+    .msg{margin-top:10px;padding:10px;border-radius:10px;background:#fdecee;color:#b00020;border:1px solid #f6c9cf;display:none;white-space:pre-wrap}
     .foot{margin-top:10px;font-size:12px;color:var(--muted);text-align:center}
   </style>
 </head>
@@ -38,14 +39,33 @@
 </div>
 
 <script>
-  // ✅ Endpoint público da sua Edge Function (mantemos o que você usou)
+  // ✅ Endpoint público da Edge Function
   const ADMIN_LOGIN_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/admin-login";
 
-  // ✅ ANON KEY do projeto – necessária para chamar Edge Functions públicas a partir do front
+  // ✅ ANON KEY do projeto – obrigatória no gateway das Edge Functions
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
 
+  // Limpa tokens antigos ao abrir a página (evita sessão inconsistente)
+  (function resetOldSession(){
+    try {
+      localStorage.removeItem('hn_admin_token');
+      // opcional: manter o nome do admin entre logins
+      // localStorage.removeItem('hn_admin_name');
+    } catch(_) {}
+  })();
+
+  function showMsg(text){
+    const msg = document.getElementById('msg');
+    msg.textContent = text;
+    msg.style.display = 'block';
+  }
+  function hideMsg(){
+    const msg = document.getElementById('msg');
+    msg.textContent = '';
+    msg.style.display = 'none';
+  }
+
   async function adminLogin(user, pass){
-    // evita espaços acidentais
     user = (user || "").trim();
     pass = (pass || "").trim();
 
@@ -56,7 +76,6 @@
         "Authorization": "Bearer " + SUPABASE_ANON_KEY,
         "apikey": SUPABASE_ANON_KEY
       },
-      // acrescenta um noCache para evitar CDN/Cache velho
       cache: "no-store",
       body: JSON.stringify({ user, pass })
     });
@@ -64,11 +83,10 @@
     let data = {};
     try { data = await res.json(); } catch(_) {}
 
-    // 🔎 logs de diagnóstico no console
+    // log de diagnóstico (F12 → Console)
     console.log("[admin-login] status:", res.status, "response:", data);
 
     if (!res.ok || !data.ok) {
-      // diferencia 401 (credenciais) de outros erros
       const msg = (res.status === 401 || data.error === "invalid")
         ? "invalid"
         : (data.error || "fail");
@@ -77,47 +95,47 @@
     return data; // { ok:true, token, name }
   }
 
-  function showMsg(text){
-    const msg = document.getElementById('msg');
-    msg.textContent = text;
-    msg.style.display = 'block';
-  }
-
   document.getElementById('btnLogin').addEventListener('click', submitLogin);
   document.getElementById('pass').addEventListener('keydown', (e)=>{
     if(e.key === 'Enter') submitLogin();
   });
 
   async function submitLogin(){
+    const btn = document.getElementById('btnLogin');
     const user = document.getElementById('user').value;
     const pass = document.getElementById('pass').value;
-    const msg = document.getElementById('msg');
-    msg.style.display = 'none';
-    msg.textContent = '';
+
+    hideMsg();
 
     if(!user || !pass){
       showMsg("Preencha usuário e senha.");
       return;
     }
 
+    btn.disabled = true;
+    btn.textContent = "Entrando…";
+
     try{
       const { token, name } = await adminLogin(user, pass);
       localStorage.setItem('hn_admin_token', token);
       localStorage.setItem('hn_admin_name', name || user);
-      // força navegação limpa (sem cache)
+      // navegação limpa (evita cache)
       window.location.replace("index.html");
     }catch(err){
-      showMsg(err.message === "invalid"
-        ? "Usuário ou senha inválidos."
-        : "Falha no login. Tente novamente.");
+      if (err.message === "invalid") {
+        showMsg("Usuário ou senha inválidos.");
+      } else {
+        showMsg("Falha no login. Verifique sua conexão e tente novamente.");
+      }
+    }finally{
+      btn.disabled = false;
+      btn.textContent = "Entrar";
     }
   }
 
-  // força recarregar sem cache quando a página for carregada (ajuda no Netlify)
+  // força recarregar sem cache quando voltar para a página
   window.addEventListener('pageshow', (e) => {
-    if (e.persisted) {
-      window.location.reload();
-    }
+    if (e.persisted) window.location.reload();
   });
 </script>
 </body>
