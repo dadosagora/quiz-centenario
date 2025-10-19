@@ -141,7 +141,7 @@
       </div>
       <table id="v-table">
         <thead><tr>
-          <th>Nome</th><th>Cidade</th><th>Código</th><th>Status</th><th>Emitido</th><th>Expira</th><th>Ações</th>
+          <th>Nome</th><th>Cidade</th><th>Código</th><th>Status</th><th>Emitido</th><th>Expira</th><th>Acertos 1ª</th><th>Ações</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -441,26 +441,32 @@
   $('v-search').addEventListener('input', debounce(loadVouchers, 300));
 
   async function loadVouchers(){
-    vBody.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
+    vBody.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
     try{
       const search = $('v-search').value.trim() || "";
       const status = $('v-status').value || "";
       const { items } = await AdminAPI.listVouchers({ search, status });
       if(!items.length){ vBody.innerHTML=''; vEmpty.style.display='block'; return; }
       vEmpty.style.display='none';
-      vBody.innerHTML = items.map(v => `
-        <tr>
-          <td>${esc(v.user?.nome||'')}</td>
-          <td>${esc(v.user?.cidade||'')}</td>
-          <td><code>${esc(v.code)}</code></td>
-          <td>${badgeStatus(v.status)}</td>
-          <td>${formatDate(v.issued_at)}</td>
-          <td>${formatDate(v.expires_at)}</td>
-          <td>${v.status==='pendente' ? `<button class="btn" onclick="markRedeemed('${v.id}')">Validar retirada</button>` : ''}</td>
-        </tr>
-      `).join('');
+      vBody.innerHTML = items.map(v => {
+        const hits = (typeof v.first_try_hits === 'number') ? v.first_try_hits : null;
+        const total = (typeof v.batch_total === 'number' && v.batch_total > 0) ? v.batch_total : null;
+        const hitsCell = (hits !== null && total !== null) ? `${hits} / ${total}` : '—';
+        return `
+          <tr>
+            <td>${esc(v.user?.nome||'')}</td>
+            <td>${esc(v.user?.cidade||'')}</td>
+            <td><code>${esc(v.code)}</code></td>
+            <td>${badgeStatus(v.status)}</td>
+            <td>${formatDate(v.issued_at)}</td>
+            <td>${formatDate(v.expires_at)}</td>
+            <td>${hitsCell}</td>
+            <td>${v.status==='pendente' ? `<button class="btn" onclick="markRedeemed('${v.id}')">Validar retirada</button>` : ''}</td>
+          </tr>
+        `;
+      }).join('');
     }catch(err){
-      vBody.innerHTML = `<tr><td colspan="7" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+      vBody.innerHTML = `<tr><td colspan="8" class="warn">Erro: ${esc(err.message)}</td></tr>`;
     }
   }
 
