@@ -30,7 +30,13 @@
     .bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--gold-2),var(--gold));transition:width .25s}
     .question{font-size:clamp(18px,2.6vw,22px);line-height:1.35;margin:6px 0 12px;font-weight:800}
     .options{display:grid;gap:8px}
-    .opt{display:flex;gap:10px;align-items:center;background:var(--opt);border:1px solid var(--opt-border);border-radius:12px;padding:12px;cursor:pointer;transition:border-color .15s,transform .05s}
+    .opt{
+      display:flex;gap:10px;align-items:center;background:var(--opt);
+      border:1px solid var(--opt-border);border-radius:12px;padding:12px;cursor:pointer;
+      transition:border-color .15s,transform .05s;
+      /* touch-friendly */
+      touch-action: manipulation; user-select:none; -webkit-tap-highlight-color: transparent;
+    }
     .opt:hover{border-color:var(--opt-hover);transform:translateY(-1px)}
     .opt.disabled{opacity:.6;pointer-events:none}
     .badge{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;color:var(--gold-2);border:1px solid var(--border)}
@@ -94,10 +100,10 @@
         <div id="options" class="options"></div>
         <div id="feedback" class="feedback"></div>
         <div class="actions">
-          <button class="btn secondary" id="btnSkip">Pular</button>
+          <button class="btn secondary" id="btnSkip" type="button">Pular</button>
           <div style="display:flex; gap:8px;">
-            <button class="btn secondary" id="btnTryAgain" disabled>Tentar novamente</button>
-            <button class="btn" id="btnNext" disabled>Próxima</button>
+            <button class="btn secondary" id="btnTryAgain" type="button" disabled>Tentar novamente</button>
+            <button class="btn" id="btnNext" type="button" disabled>Próxima</button>
           </div>
         </div>
       </div>
@@ -114,18 +120,18 @@
           <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
         </div>
 
-        <!-- 1) Baixar / Copiar -->
+        <!-- Baixar / Copiar -->
         <div class="btn-row">
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
-          <button id="btnCopy" class="btn secondary">Copiar código</button>
+          <button id="btnCopy" class="btn secondary" type="button">Copiar código</button>
         </div>
 
-        <!-- 2) Texto de progresso -->
+        <!-- Texto de progresso -->
         <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
-        <!-- 3) Ações -->
+        <!-- Ações -->
         <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
-          <button class="btn" id="btnContinue">Continuar respondendo</button>
+          <button class="btn" id="btnContinue" type="button">Continuar respondendo</button>
           <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">
             📲 Compartilhe com seus amigos
           </a>
@@ -133,12 +139,12 @@
           <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
         </div>
       </div>
-      <!-- /VISÃO FINAL -->
 
       <!-- VISÃO SELETOR -->
       <div id="selectorView" class="selector">
         <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Escolha como quer continuar</h2>
         <p class="note">Selecione uma <strong>categoria</strong> e uma <strong>dificuldade</strong> para carregar mais 10 perguntas.</p>
+
         <div class="row" style="margin-top:8px;">
           <div>
             <label for="selCategoria">Categoria</label>
@@ -149,11 +155,13 @@
             <select id="selDificuldade"></select>
           </div>
         </div>
+
         <p class="hint">As opções acima são geradas com base nas perguntas ativas do banco.</p>
         <div id="selectorWarn" class="warn">Não encontramos perguntas com esse filtro. Tente outra combinação.</div>
+
         <div class="btn-row" style="margin-top:10px;">
-          <button id="btnStartFiltered" class="btn">Começar esse lote</button>
-          <button id="btnCancelSelector" class="btn secondary">Cancelar</button>
+          <button id="btnStartFiltered" class="btn" type="button">Começar esse lote</button>
+          <button id="btnCancelSelector" class="btn secondary" type="button">Cancelar</button>
         </div>
       </div>
       <!-- /VISÃO SELETOR -->
@@ -171,7 +179,7 @@
   // === CONFIG ===
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  const PDF_URL = "";      // link do livro se já tiver
+  const PDF_URL = "";
   const BATCH_SIZE = 10;
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -210,12 +218,18 @@
 
   let userId = null;
   let allQuestions = [];
-  let answeredTotal = 0;
+  let answeredTotal = 0;   // só incrementa em ACERTO
   let askedIds = new Set();
   let voucherIssued = false;
 
   let batch = [];
   let idxInBatch = 0;
+
+  // estado da pergunta atual
+  let currentCorrectKey = '';
+  let currentAttempts = 0;
+  let locked = false;       // trava após acertar
+  let handlingTap = false;  // debounce de toque
 
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
   const fmtDateISO = (d)=>d.toISOString();
@@ -255,10 +269,14 @@
     els.progressBar.style.width = `${pct}%`;
   }
 
-  // ===== renderQuestion COM TRAVA E CONTAGEM POR PERGUNTA =====
   function renderQuestion(){
     const q = batch[idxInBatch];
     updateProgress();
+
+    // reset estado
+    currentAttempts = 0;
+    locked = false;
+    handlingTap = false;
 
     els.question.textContent = q.enunciado;
     els.feedback.textContent = '';
@@ -266,62 +284,63 @@
     els.btnTryAgain.disabled = true;
     els.btnNext.disabled = true;
 
-    // correta pode vir A/B/C/D ou o próprio texto
-    let correctKey = normalizeKey(q.correta);
+    // correta pode vir A/B/C/D ou texto
+    currentCorrectKey = normalizeKey(q.correta);
     const optsRaw = [
       {key:'a',label:'A',text:q.alternativa_a},
       {key:'b',label:'B',text:q.alternativa_b},
       {key:'c',label:'C',text:q.alternativa_c},
       {key:'d',label:'D',text:q.alternativa_d},
     ];
-    if(!['a','b','c','d'].includes(correctKey) && q.correta){
+    if(!['a','b','c','d'].includes(currentCorrectKey) && q.correta){
       const target=normalizeText(q.correta);
       const hit=optsRaw.find(o=>normalizeText(o.text)===target);
-      if(hit) correctKey=hit.key;
+      if(hit) currentCorrectKey=hit.key;
     }
-    const opts = optsRaw.map(o=>({...o,isCorrect:o.key===correctKey}));
-    if(!opts.some(o=>o.isCorrect)){opts[0].isCorrect=true;console.warn('Pergunta sem correta definida:',q.id);}
+    if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q.id); }
 
-    let attempts = 0;     // tentativas nesta PERGUNTA
-    let locked = false;   // trava após acertar
+    els.options.innerHTML = optsRaw.map(o => `
+      <button type="button" class="opt" data-key="${o.key}">
+        <div class="badge">${o.label}</div><div>${o.text}</div>
+      </button>
+    `).join('');
+  }
 
-    els.options.innerHTML='';
-    for(const opt of opts){
-      const btn=document.createElement('button');
-      btn.type='button'; btn.className='opt';
-      btn.innerHTML=`<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
+  // Delegação de eventos: mais confiável em mobile
+  els.options.addEventListener('pointerup', async (ev)=>{
+    const btn = ev.target.closest('.opt');
+    if(!btn || locked) return;
+    if(handlingTap) return;            // debounced
+    handlingTap = true;
+    setTimeout(()=>handlingTap=false, 120);
 
-      btn.addEventListener('click', async ()=>{
-        if (locked) return;      // evita toques fantasma pós-acerto
-        attempts++;
+    currentAttempts++;
+    const key = (btn.dataset.key||'').toLowerCase();
 
-        if (opt.isCorrect){
-          locked = true;
-          els.feedback.textContent='✅ Resposta certa!';
-          els.feedback.className='feedback ok';
-          els.btnNext.disabled=false;
-          els.btnTryAgain.disabled=true;
+    if(key === currentCorrectKey){
+      locked = true;
+      els.feedback.textContent='✅ Resposta certa!';
+      els.feedback.className='feedback ok';
+      els.btnNext.disabled=false;
+      els.btnTryAgain.disabled=true;
 
-          askedIds.add(q.id);
-          answeredTotal++;
+      const q = batch[idxInBatch];
+      askedIds.add(q.id);
+      answeredTotal++; // conta ACERTO
 
-          await insertSubmission({
-            user_id: userId,
-            question_id: q.id,
-            first_try_correct: (attempts === 1)
-          });
-
-          disableOptions();
-        } else {
-          els.feedback.textContent='❌ Não é essa. Tente novamente.';
-          els.feedback.className='feedback err';
-          els.btnTryAgain.disabled=false;
-        }
+      await insertSubmission({
+        user_id: userId,
+        question_id: q.id,
+        first_try_correct: (currentAttempts === 1)
       });
 
-      els.options.appendChild(btn);
+      disableOptions();
+    } else {
+      els.feedback.textContent='❌ Não é essa. Tente novamente.';
+      els.feedback.className='feedback err';
+      els.btnTryAgain.disabled=false;
     }
-  }
+  }, {passive:true});
 
   function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
   function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
@@ -335,18 +354,8 @@
   function populateSelector(){
     const cats = computeUnique(allQuestions, 'categoria');
     const difs = computeUnique(allQuestions, 'dificuldade');
-
-    els.selCategoria.innerHTML = '';
-    els.selDificuldade.innerHTML = '';
-
-    for(const c of cats){
-      const opt = document.createElement('option'); opt.value=c; opt.textContent=c;
-      els.selCategoria.appendChild(opt);
-    }
-    for(const d of difs){
-      const opt = document.createElement('option'); opt.value=d; opt.textContent=d;
-      els.selDificuldade.appendChild(opt);
-    }
+    els.selCategoria.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+    els.selDificuldade.innerHTML = difs.map(d=>`<option value="${d}">${d}</option>`).join('');
   }
 
   function startBatch({ categoria=null, dificuldade=null } = {}){
@@ -363,7 +372,6 @@
       showView('selector');
       return;
     }
-
     showView('quiz');
     renderQuestion();
   }
@@ -436,10 +444,10 @@
     else { renderQuestion(); }
   });
 
-  // Pular não grava submission nem incrementa acertos
+  // Pular: NÃO incrementa answeredTotal nem grava submission
   els.btnSkip.addEventListener('click',async()=>{
     const q = batch[idxInBatch];
-    askedIds.add(q.id);
+    askedIds.add(q.id);  // não repetir essa pergunta
     idxInBatch++;
     if(idxInBatch >= batch.length){ await showFinal(); }
     else { renderQuestion(); }
@@ -465,9 +473,7 @@
     startBatch({ categoria, dificuldade });
   });
 
-  els.btnCancelSelector.addEventListener('click', ()=>{
-    showView('final');
-  });
+  els.btnCancelSelector.addEventListener('click', ()=>{ showView('final'); });
 
   // === Boot ===
   (async function init(){
@@ -481,8 +487,7 @@
       els.btnTryAgain.disabled=true; els.btnNext.disabled=true; els.btnSkip.disabled=true;
       return;
     }
-
-    startBatch(); // primeiro lote
+    startBatch();
   })();
 </script>
 </body>
