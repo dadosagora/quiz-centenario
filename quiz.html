@@ -103,38 +103,43 @@
         </div>
       </div>
 
-      <!-- VISÃO FINAL (VOUCHER + CONTINUAR + COMPARTILHAR) -->
-      <div id="finalView" class="final" style="display:none">
-        <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
-        <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
+     <!-- VISÃO FINAL (VOUCHER + CONTINUAR + COMPARTILHAR) -->
+<div id="finalView" class="final" style="display:none">
+  <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">
+    Parabéns! Você concluiu o Quiz 🎉
+  </h2>
+  <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
 
-        <div id="voucherBox" class="voucher">
-          <h3>Seu código de retirada</h3>
-          <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
-          <div class="note" id="voucherValidity">Válido até —</div>
-          <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
-        </div>
+  <div id="voucherBox" class="voucher">
+    <h3>Seu código de retirada</h3>
+    <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
+    <div class="note" id="voucherValidity">Válido até —</div>
+    <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
+  </div>
 
-        <div class="btn-row">
-          <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
-          <button id="btnCopy" class="btn secondary">Copiar código</button>
-          <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
-        </div>
+  <!-- 1) Mantém BAIXAR e COPIAR no topo -->
+  <div class="btn-row">
+    <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
+    <button id="btnCopy" class="btn secondary">Copiar código</button>
+  </div>
 
-        <!-- Botão de compartilhar no WhatsApp -->
-        <div class="btn-row" style="margin-top:8px;">
-          <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">
-            📲 Compartilhe com seus amigos
-          </a>
-        </div>
+  <!-- 2) Depois vem o texto de progresso -->
+  <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
-        <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
-          <button class="btn" id="btnContinue">Continuar respondendo</button>
-          <a class="btn secondary" href="index.html">Encerrar</a>
-        </div>
-
-        <p class="note" id="answeredCount" style="margin-top:10px;"></p>
-      </div>
+  <!-- 3) E por fim os botões de ação -->
+  <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
+    <button class="btn" id="btnContinue">Continuar respondendo</button>
+    <a id="btnShare" href="#" target="_blank" rel="noopener"
+       class="btn" style="background:#25d366; border:none; color:#fff;">
+      📲 Compartilhe com seus amigos
+    </a>
+    <a class="btn secondary" href="index.html">Encerrar</a>
+    <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">
+      Ir para o site HN Notícias
+    </a>
+  </div>
+</div>
+<!-- FIM VISÃO FINAL -->
 
       <!-- VISÃO SELETOR (categoria + dificuldade) -->
       <div id="selectorView" class="selector">
