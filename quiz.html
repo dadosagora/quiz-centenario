@@ -49,7 +49,6 @@
     .code{font-size:clamp(20px,4vw,26px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:8px 12px;border-radius:12px;display:inline-block;margin:6px 0 0}
     .note{color:var(--muted);font-size:14px;margin-top:6px}
 
-    /* Tela de seleção (categorias/dificuldades) */
     .selector{display:none}
     .selector .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .selector label{font-weight:700;font-size:14px;margin:2px 0 6px;display:block}
@@ -103,49 +102,43 @@
         </div>
       </div>
 
-     <!-- VISÃO FINAL (VOUCHER + CONTINUAR + COMPARTILHAR) -->
-<div id="finalView" class="final" style="display:none">
-  <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">
-    Parabéns! Você concluiu o Quiz 🎉
-  </h2>
-  <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
+      <!-- VISÃO FINAL -->
+      <div id="finalView" class="final" style="display:none">
+        <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
+        <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
 
-  <div id="voucherBox" class="voucher">
-    <h3>Seu código de retirada</h3>
-    <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
-    <div class="note" id="voucherValidity">Válido até —</div>
-    <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
-  </div>
+        <div id="voucherBox" class="voucher">
+          <h3>Seu código de retirada</h3>
+          <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
+          <div class="note" id="voucherValidity">Válido até —</div>
+          <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
+        </div>
 
-  <!-- 1) Mantém BAIXAR e COPIAR no topo -->
-  <div class="btn-row">
-    <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
-    <button id="btnCopy" class="btn secondary">Copiar código</button>
-  </div>
+        <!-- 1) Baixar / Copiar -->
+        <div class="btn-row">
+          <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
+          <button id="btnCopy" class="btn secondary">Copiar código</button>
+        </div>
 
-  <!-- 2) Depois vem o texto de progresso -->
-  <p class="note" id="answeredCount" style="margin-top:10px;"></p>
+        <!-- 2) Texto de progresso -->
+        <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
-  <!-- 3) E por fim os botões de ação -->
-  <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
-    <button class="btn" id="btnContinue">Continuar respondendo</button>
-    <a id="btnShare" href="#" target="_blank" rel="noopener"
-       class="btn" style="background:#25d366; border:none; color:#fff;">
-      📲 Compartilhe com seus amigos
-    </a>
-    <a class="btn secondary" href="index.html">Encerrar</a>
-    <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">
-      Ir para o site HN Notícias
-    </a>
-  </div>
-</div>
-<!-- FIM VISÃO FINAL -->
+        <!-- 3) Ações -->
+        <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
+          <button class="btn" id="btnContinue">Continuar respondendo</button>
+          <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">
+            📲 Compartilhe com seus amigos
+          </a>
+          <a class="btn secondary" href="index.html">Encerrar</a>
+          <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
+        </div>
+      </div>
+      <!-- /VISÃO FINAL -->
 
-      <!-- VISÃO SELETOR (categoria + dificuldade) -->
+      <!-- VISÃO SELETOR -->
       <div id="selectorView" class="selector">
         <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Escolha como quer continuar</h2>
         <p class="note">Selecione uma <strong>categoria</strong> e uma <strong>dificuldade</strong> para carregar mais 10 perguntas.</p>
-
         <div class="row" style="margin-top:8px;">
           <div>
             <label for="selCategoria">Categoria</label>
@@ -156,15 +149,14 @@
             <select id="selDificuldade"></select>
           </div>
         </div>
-
         <p class="hint">As opções acima são geradas com base nas perguntas ativas do banco.</p>
         <div id="selectorWarn" class="warn">Não encontramos perguntas com esse filtro. Tente outra combinação.</div>
-
         <div class="btn-row" style="margin-top:10px;">
           <button id="btnStartFiltered" class="btn">Começar esse lote</button>
           <button id="btnCancelSelector" class="btn secondary">Cancelar</button>
         </div>
       </div>
+      <!-- /VISÃO SELETOR -->
     </div>
   </main>
 
@@ -180,7 +172,7 @@
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "";      // link do livro se já tiver
-  const BATCH_SIZE = 10;   // 10 por lote
+  const BATCH_SIZE = 10;
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -217,16 +209,14 @@
   };
 
   let userId = null;
-  let allQuestions = [];       // todas as ativas
-  let answeredTotal = 0;       // acumulado de respondidas (acertos)
-  let askedIds = new Set();    // ids já apresentados (para não repetir)
-  let voucherIssued = false;   // só na primeira vez
+  let allQuestions = [];
+  let answeredTotal = 0;
+  let askedIds = new Set();
+  let voucherIssued = false;
 
-  // estado do lote atual
-  let batch = [];              // perguntas deste lote
-  let idxInBatch = 0;          // índice dentro do lote
+  let batch = [];
+  let idxInBatch = 0;
 
-  // === Utils ===
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
   const fmtDateISO = (d)=>d.toISOString();
   const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
@@ -236,7 +226,9 @@
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
   async function insertSubmission({ user_id, question_id, first_try_correct }){
-    const { error } = await client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
+    const { error } = await client
+      .from('submissions')
+      .insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
     if(error) console.error('Erro ao gravar submission:', error);
   }
 
@@ -244,7 +236,8 @@
     let code = formatVoucherCode(), issuedAt = new Date(), expiresAt = addDays(issuedAt,14);
     for(let i=0;i<5;i++){
       const { error } = await client.from('vouchers').insert({
-        user_id, code, status:'pendente', issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
+        user_id, code, status:'pendente',
+        issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
         partner:'Mina Wine Bar – Praça do Congresso'
       });
       if(!error) return { code, issuedAt, expiresAt };
@@ -262,6 +255,7 @@
     els.progressBar.style.width = `${pct}%`;
   }
 
+  // ===== renderQuestion COM TRAVA E CONTAGEM POR PERGUNTA =====
   function renderQuestion(){
     const q = batch[idxInBatch];
     updateProgress();
@@ -272,7 +266,7 @@
     els.btnTryAgain.disabled = true;
     els.btnNext.disabled = true;
 
-    // correta pode vir como A/B/C/D OU como o texto da alternativa
+    // correta pode vir A/B/C/D ou o próprio texto
     let correctKey = normalizeKey(q.correta);
     const optsRaw = [
       {key:'a',label:'A',text:q.alternativa_a},
@@ -288,8 +282,8 @@
     const opts = optsRaw.map(o=>({...o,isCorrect:o.key===correctKey}));
     if(!opts.some(o=>o.isCorrect)){opts[0].isCorrect=true;console.warn('Pergunta sem correta definida:',q.id);}
 
-    // 🔧 Correção: uma contagem única por PERGUNTA
-    let attemptsForThisQuestion = 0;
+    let attempts = 0;     // tentativas nesta PERGUNTA
+    let locked = false;   // trava após acertar
 
     els.options.innerHTML='';
     for(const opt of opts){
@@ -298,10 +292,11 @@
       btn.innerHTML=`<div class="badge">${opt.label}</div><div>${opt.text}</div>`;
 
       btn.addEventListener('click', async ()=>{
-        // Conta qualquer clique (certo ou errado)
-        attemptsForThisQuestion++;
+        if (locked) return;      // evita toques fantasma pós-acerto
+        attempts++;
 
-        if(opt.isCorrect){
+        if (opt.isCorrect){
+          locked = true;
           els.feedback.textContent='✅ Resposta certa!';
           els.feedback.className='feedback ok';
           els.btnNext.disabled=false;
@@ -310,11 +305,14 @@
           askedIds.add(q.id);
           answeredTotal++;
 
-          const firstTry = (attemptsForThisQuestion === 1);
-          await insertSubmission({ user_id:userId, question_id:q.id, first_try_correct: firstTry });
+          await insertSubmission({
+            user_id: userId,
+            question_id: q.id,
+            first_try_correct: (attempts === 1)
+          });
 
           disableOptions();
-        }else{
+        } else {
           els.feedback.textContent='❌ Não é essa. Tente novamente.';
           els.feedback.className='feedback err';
           els.btnTryAgain.disabled=false;
@@ -352,7 +350,6 @@
   }
 
   function startBatch({ categoria=null, dificuldade=null } = {}){
-    // pega as próximas não usadas, com filtro opcional
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
     if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
@@ -362,7 +359,6 @@
     idxInBatch = 0;
 
     if(batch.length === 0){
-      // mostra seletor com aviso
       els.selectorWarn.style.display = 'block';
       showView('selector');
       return;
@@ -381,10 +377,9 @@
     return shuffle(data || []);
   }
 
-  async function showFinal({ noMore=false } = {}){
+  async function showFinal(){
     showView('final');
 
-    // voucher apenas no primeiro lote concluído
     if(!voucherIssued){
       const voucher = await ensureVoucher(userId);
       els.voucherCode.textContent = voucher.code;
@@ -394,7 +389,6 @@
       els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
       els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar a revista.';
     }else{
-      // nos lotes seguintes, não gerar novo voucher
       els.voucherBox.style.display = 'none';
       els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
       els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
@@ -403,14 +397,11 @@
     const totalAtivas = allQuestions.length;
     els.answeredCount.textContent = `Você já respondeu ${answeredTotal} de ${totalAtivas} perguntas disponíveis.`;
 
-    // exibe “Continuar” apenas se há mais perguntas globais
     const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
     els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
 
-    // barra completa no final
     els.progressBar.style.width = '100%';
 
-    // PDF
     els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
     if(!(PDF_URL && /^https?:\/\//i.test(PDF_URL))){
       els.btnDownload.setAttribute('disabled','true');
@@ -420,33 +411,40 @@
       els.btnDownload.textContent = 'Baixar o livro';
     }
 
-    // WhatsApp share dinâmico
     const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
     const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
     els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
   }
 
   function showView(name){
-    // name = 'quiz' | 'final' | 'selector'
     els.quizView.style.display     = (name==='quiz') ? 'block' : 'none';
     els.finalView.style.display    = (name==='final') ? 'block' : 'none';
     els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
   }
 
   // === Eventos ===
-  els.btnTryAgain.addEventListener('click',()=>{enableOptions();els.feedback.textContent='';els.feedback.className='feedback';els.btnTryAgain.disabled=true;});
+  els.btnTryAgain.addEventListener('click',()=>{
+    enableOptions();
+    els.feedback.textContent='';
+    els.feedback.className='feedback';
+    els.btnTryAgain.disabled=true;
+  });
+
   els.btnNext.addEventListener('click',async()=>{
     idxInBatch++;
     if(idxInBatch >= batch.length){ await showFinal(); }
     else { renderQuestion(); }
   });
+
+  // Pular não grava submission nem incrementa acertos
   els.btnSkip.addEventListener('click',async()=>{
     const q = batch[idxInBatch];
-    askedIds.add(q.id); // marcar como vista para não repetir
+    askedIds.add(q.id);
     idxInBatch++;
     if(idxInBatch >= batch.length){ await showFinal(); }
     else { renderQuestion(); }
   });
+
   els.btnCopy.addEventListener('click',async()=>{
     const code = els.voucherCode.textContent.trim();
     try{ await navigator.clipboard.writeText(code); els.btnCopy.textContent='Copiado!'; await wait(1000); }
@@ -454,14 +452,12 @@
     els.btnCopy.textContent='Copiar código';
   });
 
-  // CONTINUAR → abre seletor
   els.btnContinue.addEventListener('click', ()=>{
     populateSelector();
     els.selectorWarn.style.display = 'none';
     showView('selector');
   });
 
-  // Seletor: iniciar lote filtrado
   els.btnStartFiltered.addEventListener('click', ()=>{
     const categoria = els.selCategoria.value;
     const dificuldade = els.selDificuldade.value;
@@ -469,7 +465,6 @@
     startBatch({ categoria, dificuldade });
   });
 
-  // Seletor: cancelar e voltar ao final
   els.btnCancelSelector.addEventListener('click', ()=>{
     showView('final');
   });
@@ -487,8 +482,7 @@
       return;
     }
 
-    // 1º lote sem filtro (para o voucher)
-    startBatch();
+    startBatch(); // primeiro lote
   })();
 </script>
 </body>
