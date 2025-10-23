@@ -1,3 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiz do Centenário de Criciúma — HN Notícias</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#ffffff; --text:#111; --muted:#555;
+      --card:#fff; --border:#e9e9e9;
+      --gold:#c9a227; --gold-2:#b88900;
+      --ok:#17823b; --ok-bg:#e8f6ee; --err:#b00020; --err-bg:#fdecee;
+      --opt:#fff; --opt-border:#dedede; --opt-hover:#cfcfcf;
+      --btn:#111; --btn-text:#fff;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .wrap{min-height:100dvh;display:flex;flex-direction:column}
+    header{border-bottom:1px solid var(--border);background:#fff}
+    .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 8px}
+    .logo-wrap{display:flex;justify-content:center}
+    .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
+    .head h1{margin:8px 0 0;text-align:center;font-size:clamp(18px,3.6vw,24px)}
+
+    main{width:min(980px,94vw);margin:16px auto;flex:1}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+    .progress{display:flex;align-items:center;gap:8px;margin-bottom:12px;color:var(--muted);font-size:14px}
+    .bar{flex:1;height:8px;background:#f1f1f1;border-radius:999px;overflow:hidden;border:1px solid #e6e6e6}
+    .bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--gold-2),var(--gold));transition:width .25s}
+    .question{font-size:clamp(18px,2.6vw,22px);line-height:1.35;margin:6px 0 12px;font-weight:800}
+    .options{display:grid;gap:8px}
+    .opt{
+      display:flex;gap:10px;align-items:center;background:var(--opt);
+      border:1px solid var(--opt-border);border-radius:12px;padding:12px;cursor:pointer;
+      transition:border-color .15s,transform .05s;
+      touch-action: manipulation; user-select:none; -webkit-tap-highlight-color: transparent;
+    }
+    .opt:hover{border-color:var(--opt-hover);transform:translateY(-1px)}
+    .opt.disabled{opacity:.6;pointer-events:none}
+    .badge{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;color:var(--gold-2);border:1px solid var(--border)}
+    .feedback{min-height:32px;margin:8px 2px 2px;font-weight:700;padding:8px;border-radius:10px;display:none}
+    .feedback.ok{display:block;color:var(--ok);background:var(--ok-bg);border:1px solid #cdebd8}
+    .feedback.err{display:block;color:var(--err);background:var(--err-bg);border:1px solid #f6c9cf}
+    .actions{display:flex;gap:8px;justify-content:space-between;margin-top:10px}
+    .btn{appearance:none;border:1px solid var(--btn);background:var(--btn);color:var(--btn-text);border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
+    .btn.secondary{background:#fff;color:#111;border:1px solid #cfcfcf}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+
+    .final{text-align:center;padding:6px}
+    .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+    .voucher{margin:10px auto;padding:14px;border-radius:16px;border:1px dashed var(--gold-2);background:#fff;max-width:560px}
+    .voucher h3{margin:0 0 6px;font-size:20px;color:var(--gold-2)}
+    .code{font-size:clamp(20px,4vw,26px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:8px 12px;border-radius:12px;display:inline-block;margin:6px 0 0}
+    .note{color:var(--muted);font-size:14px;margin-top:6px}
+
+    .selector{display:none}
+    .selector .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .selector label{font-weight:700;font-size:14px;margin:2px 0 6px;display:block}
+    .selector select{width:100%;padding:10px;border:1px solid #dcdcdc;border-radius:10px;background:#fff}
+    .selector .hint{color:var(--muted);font-size:13px;margin:6px 0 0}
+    .selector .warn{color:#b00020;background:#fdecee;border:1px solid #f6c9cf;border-radius:10px;padding:8px;margin-top:10px;display:none}
+
+    footer{border-top:1px solid var(--border);background:#fff}
+    .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
+    .footer-inner img{max-width:100%;height:auto}
+
+    @media (max-height:760px){
+      .head{padding:8px 0 4px}
+      .logo-wrap img{max-width:360px}
+      .head h1{font-size:18px;margin-top:6px}
+      main{margin:10px auto}
+      .card{padding:12px}
+      .question{margin:4px 0 10px}
+      .opt{padding:10px}
+      .btn{padding:9px 12px}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="head">
+      <div class="logo-wrap"><img src="assets/hn-logo.png" alt="HN Notícias"></div>
+      <h1>Quiz do Centenário de Criciúma</h1>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="progress" id="progressWrap" style="display:none">
+        <span id="progressText">Pergunta 1</span>
+        <div class="bar"><div id="progressBar"></div></div>
+      </div>
+
+      <!-- VISÃO QUIZ -->
+      <div id="quizView">
+        <div id="question" class="question"></div>
+        <div id="options" class="options"></div>
+        <div id="feedback" class="feedback"></div>
+        <div class="actions">
+          <button class="btn secondary" id="btnSkip" type="button">Pular</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn secondary" id="btnTryAgain" type="button" disabled>Tentar novamente</button>
+            <button class="btn" id="btnNext" type="button" disabled>Próxima</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISÃO FINAL -->
+      <div id="finalView" class="final" style="display:none">
+        <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
+        <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
+
+        <div id="voucherBox" class="voucher">
+          <h3>Seu código de retirada</h3>
+          <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
+          <div class="note" id="voucherValidity">Válido até —</div>
+          <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
+        </div>
+
+        <!-- Baixar / Copiar -->
+        <div class="btn-row">
+          <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
+          <button id="btnCopy" class="btn secondary" type="button">Copiar código</button>
+        </div>
+
+        <!-- Texto de progresso -->
+        <p class="note" id="answeredCount" style="margin-top:10px;"></p>
+
+        <!-- Ações -->
+        <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
+          <button class="btn" id="btnContinue" type="button">Continuar respondendo</button>
+          <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">
+            📲 Compartilhe com seus amigos
+          </a>
+          <a class="btn secondary" href="index.html">Encerrar</a>
+          <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
+        </div>
+      </div>
+
+      <!-- VISÃO SELETOR -->
+      <div id="selectorView" class="selector">
+        <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Escolha como quer continuar</h2>
+        <p class="note">Selecione uma <strong>categoria</strong> e uma <strong>dificuldade</strong> para carregar mais 10 perguntas.</p>
+
+        <div class="row" style="margin-top:8px;">
+          <div>
+            <label for="selCategoria">Categoria</label>
+            <select id="selCategoria"></select>
+          </div>
+          <div>
+            <label for="selDificuldade">Dificuldade</label>
+            <select id="selDificuldade"></select>
+          </div>
+        </div>
+
+        <p class="hint">As opções acima são geradas com base nas perguntas ativas do banco.</p>
+        <div id="selectorWarn" class="warn">Não encontramos perguntas com esse filtro. Tente outra combinação.</div>
+
+        <div class="btn-row" style="margin-top:10px;">
+          <button id="btnStartFiltered" class="btn" type="button">Começar esse lote</button>
+          <button id="btnCancelSelector" class="btn secondary" type="button">Cancelar</button>
+        </div>
+      </div>
+      <!-- /VISÃO SELETOR -->
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <img src="assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos — banner oficial" />
+    </div>
+  </footer>
+</div>
+
 <script>
   // === CONFIG ===
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
@@ -48,6 +224,9 @@
   let batch = [];
   let idxInBatch = 0;
 
+  // filtro do lote atual (para repor pergunta pulada)
+  let currentFilter = { categoria: null, dificuldade: null };
+
   // estado da pergunta atual
   let currentCorrectKey = '';
   let currentAttempts = 0;
@@ -58,7 +237,11 @@
   const fmtDateISO = (d)=>d.toISOString();
   const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
   function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
-  function formatVoucherCode(){const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789",p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join("");return `HN100–${p(4)}-${p(4)}`;}
+  function formatVoucherCode(){
+    const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join("");
+    return `HN100–${p(4)}-${p(4)}`;
+  }
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
@@ -123,14 +306,13 @@
     if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q.id); }
 
     els.options.innerHTML = optsRaw.map(o => `
-      <button type="button" class="opt" data-key="${o.key}"
-        style="touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent">
+      <button type="button" class="opt" data-key="${o.key}">
         <div class="badge">${o.label}</div><div>${o.text}</div>
       </button>
     `).join('');
   }
 
-  // Delegação de eventos: mais confiável em mobile
+  // Delegação de eventos (mobile-friendly)
   els.options.addEventListener('pointerup', async (ev)=>{
     const btn = ev.target.closest('.opt');
     if(!btn || locked) return;
@@ -182,7 +364,19 @@
     els.selDificuldade.innerHTML = difs.map(d=>`<option value="${d}">${d}</option>`).join('');
   }
 
+  function takeReplacementQuestion(){
+    // pega uma nova pergunta do pool global respeitando o filtro atual
+    return allQuestions.find(q =>
+      !askedIds.has(q.id) &&
+      (currentFilter.categoria ? (q.categoria||'').trim() === currentFilter.categoria : true) &&
+      (currentFilter.dificuldade ? (q.dificuldade||'').trim() === currentFilter.dificuldade : true) &&
+      !batch.some(bq => bq.id === q.id)
+    ) || null;
+  }
+
   function startBatch({ categoria=null, dificuldade=null } = {}){
+    currentFilter = { categoria, dificuldade };
+
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
     if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
@@ -207,14 +401,6 @@
       .eq('ativa', true);
     if(error){ console.error('Erro ao buscar perguntas:', error); return []; }
     return shuffle(data || []);
-  }
-
-  // === NOVO: acha uma pergunta substituta para manter o lote com 10 ===
-  function findReplacementForBatch() {
-    // ids já usados (perguntas já vistas e as que ainda estão no batch)
-    const used = new Set([...askedIds, ...batch.map(b=>b.id)]);
-    // primeira pergunta ativa que não esteja usada
-    return allQuestions.find(q => !used.has(q.id)) || null;
   }
 
   async function showFinal(){
@@ -276,23 +462,18 @@
     else { renderQuestion(); }
   });
 
-  // Pular: NÃO conta como respondida e TENTA REPOR no mesmo lote
+  // Pular: NÃO incrementa answeredTotal nem grava submission.
+  // REPÕE a pergunta para manter o total do lote.
   els.btnSkip.addEventListener('click',async()=>{
-    const skipped = batch[idxInBatch];
-    askedIds.add(skipped.id); // não repetir a pulada
+    const q = batch[idxInBatch];
+    askedIds.add(q.id); // não repetir essa pergunta
 
-    // tenta achar uma substituta
-    const replacement = findReplacementForBatch();
-    if (replacement) {
-      // remove a atual e empurra a substituta para o fim -> mantém tamanho do lote
-      batch.splice(idxInBatch, 1);
+    // tentar repor mantendo o filtro atual do lote
+    const replacement = takeReplacementQuestion();
+    if(replacement){
       batch.push(replacement);
-      // não incrementa idxInBatch: a próxima pergunta “desce” para este índice
-      renderQuestion();
-      return;
     }
 
-    // sem substituta: apenas avança (o lote fica menor)
     idxInBatch++;
     if(idxInBatch >= batch.length){ await showFinal(); }
     else { renderQuestion(); }
@@ -335,3 +516,5 @@
     startBatch();
   })();
 </script>
+</body>
+</html>
