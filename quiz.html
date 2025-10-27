@@ -33,7 +33,7 @@
     .opt{
       display:flex;gap:10px;align-items:center;background:var(--opt);
       border:1px solid var(--opt-border);border-radius:12px;padding:12px;cursor:pointer;
-      transition:border-color .15s,transform .05s;
+      transition:border-color .15s,transform .05s, box-shadow .15s, background .15s;
       touch-action: manipulation; user-select:none; -webkit-tap-highlight-color: transparent;
     }
     .opt:hover{border-color:var(--opt-hover);transform:translateY(-1px)}
@@ -42,10 +42,29 @@
     .feedback{min-height:32px;margin:8px 2px 2px;font-weight:700;padding:8px;border-radius:10px;display:none}
     .feedback.ok{display:block;color:var(--ok);background:var(--ok-bg);border:1px solid #cdebd8}
     .feedback.err{display:block;color:var(--err);background:var(--err-bg);border:1px solid #f6c9cf}
-    .actions{display:flex;gap:8px;justify-content:space-between;margin-top:10px}
+    .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
     .btn{appearance:none;border:1px solid var(--btn);background:var(--btn);color:var(--btn-text);border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
     .btn.secondary{background:#fff;color:#111;border:1px solid #cfcfcf}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
+
+    /* Efeito "Show do Milhão" */
+    @keyframes pulseSel { 0%{box-shadow:0 0 0 0 rgba(200,162,39,.45)} 100%{box-shadow:0 0 0 8px rgba(200,162,39,0)} }
+    .opt.selected{
+      border-color:var(--gold-2);
+      box-shadow:0 0 0 2px rgba(200,162,39,.25);
+      animation:pulseSel .8s ease-out 1;
+      background:linear-gradient(0deg,#fff, #fff7e1);
+    }
+    .opt.correct{
+      border-color:#1e8847;
+      background:linear-gradient(0deg,#fff, #eaf7ef);
+      box-shadow:0 0 0 2px rgba(23,130,59,.25);
+    }
+    .opt.wrong{
+      border-color:#c43a4a;
+      background:linear-gradient(0deg,#fff, #fdecee);
+      box-shadow:0 0 0 2px rgba(176,0,32,.15);
+    }
 
     .final{text-align:center;padding:6px}
     .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px}
@@ -99,7 +118,7 @@
         <div id="options" class="options"></div>
         <div id="feedback" class="feedback"></div>
         <div class="actions">
-          <button class="btn secondary" id="btnSkip" type="button">Pular</button>
+          <!-- Removido o botão Pular -->
           <div style="display:flex; gap:8px;">
             <button class="btn secondary" id="btnTryAgain" type="button" disabled>Tentar novamente</button>
             <button class="btn" id="btnNext" type="button" disabled>Próxima</button>
@@ -193,7 +212,6 @@
     feedback: document.getElementById('feedback'),
     btnTryAgain: document.getElementById('btnTryAgain'),
     btnNext: document.getElementById('btnNext'),
-    btnSkip: document.getElementById('btnSkip'),
     quizView: document.getElementById('quizView'),
     finalView: document.getElementById('finalView'),
     selectorView: document.getElementById('selectorView'),
@@ -223,9 +241,6 @@
 
   let batch = [];
   let idxInBatch = 0;
-
-  // filtro do lote atual (para repor pergunta pulada)
-  let currentFilter = { categoria: null, dificuldade: null };
 
   // estado da pergunta atual
   let currentCorrectKey = '';
@@ -306,25 +321,45 @@
     if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q.id); }
 
     els.options.innerHTML = optsRaw.map(o => `
-      <button type="button" class="opt" data-key="${o.key}">
+      <button type="button" class="opt" data-key="${o.key}" aria-pressed="false">
         <div class="badge">${o.label}</div><div>${o.text}</div>
       </button>
     `).join('');
+  }
+
+  function clearOptStates(){
+    [...els.options.querySelectorAll('.opt')].forEach(el=>{
+      el.classList.remove('selected','correct','wrong','disabled');
+      el.setAttribute('aria-pressed','false');
+    });
+  }
+  function disableOptions(){
+    [...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));
+  }
+  function enableOptions(){
+    [...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));
   }
 
   // Delegação de eventos (mobile-friendly)
   els.options.addEventListener('pointerup', async (ev)=>{
     const btn = ev.target.closest('.opt');
     if(!btn || locked) return;
-    if(handlingTap) return;            // debounced
+    if(handlingTap) return;            // debounce
     handlingTap = true;
     setTimeout(()=>handlingTap=false, 120);
+
+    // marca como selecionada (efeito show do milhão)
+    clearOptStates();
+    btn.classList.add('selected');
+    btn.setAttribute('aria-pressed','true');
 
     currentAttempts++;
     const key = (btn.dataset.key||'').toLowerCase();
 
     if(key === currentCorrectKey){
       locked = true;
+      btn.classList.remove('selected');
+      btn.classList.add('correct');
       els.feedback.textContent='✅ Resposta certa!';
       els.feedback.className='feedback ok';
       els.btnNext.disabled=false;
@@ -342,14 +377,16 @@
 
       disableOptions();
     } else {
+      // feedback de erro com flash vermelho
+      btn.classList.remove('selected');
+      btn.classList.add('wrong');
+      setTimeout(()=>btn.classList.remove('wrong'), 600);
+
       els.feedback.textContent='❌ Não é essa. Tente novamente.';
       els.feedback.className='feedback err';
       els.btnTryAgain.disabled=false;
     }
   }, {passive:true});
-
-  function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
-  function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
 
   function computeUnique(list, key){
     const s = new Set();
@@ -364,19 +401,7 @@
     els.selDificuldade.innerHTML = difs.map(d=>`<option value="${d}">${d}</option>`).join('');
   }
 
-  function takeReplacementQuestion(){
-    // pega uma nova pergunta do pool global respeitando o filtro atual
-    return allQuestions.find(q =>
-      !askedIds.has(q.id) &&
-      (currentFilter.categoria ? (q.categoria||'').trim() === currentFilter.categoria : true) &&
-      (currentFilter.dificuldade ? (q.dificuldade||'').trim() === currentFilter.dificuldade : true) &&
-      !batch.some(bq => bq.id === q.id)
-    ) || null;
-  }
-
   function startBatch({ categoria=null, dificuldade=null } = {}){
-    currentFilter = { categoria, dificuldade };
-
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
     if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
@@ -454,26 +479,10 @@
     els.feedback.textContent='';
     els.feedback.className='feedback';
     els.btnTryAgain.disabled=true;
+    clearOptStates();
   });
 
   els.btnNext.addEventListener('click',async()=>{
-    idxInBatch++;
-    if(idxInBatch >= batch.length){ await showFinal(); }
-    else { renderQuestion(); }
-  });
-
-  // Pular: NÃO incrementa answeredTotal nem grava submission.
-  // REPÕE a pergunta para manter o total do lote.
-  els.btnSkip.addEventListener('click',async()=>{
-    const q = batch[idxInBatch];
-    askedIds.add(q.id); // não repetir essa pergunta
-
-    // tentar repor mantendo o filtro atual do lote
-    const replacement = takeReplacementQuestion();
-    if(replacement){
-      batch.push(replacement);
-    }
-
     idxInBatch++;
     if(idxInBatch >= batch.length){ await showFinal(); }
     else { renderQuestion(); }
@@ -510,7 +519,7 @@
     if(!allQuestions.length){
       document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
       document.getElementById('options').innerHTML='';
-      els.btnTryAgain.disabled=true; els.btnNext.disabled=true; els.btnSkip.disabled=true;
+      els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
       return;
     }
     startBatch();
