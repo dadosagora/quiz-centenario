@@ -4,6 +4,35 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quiz do Centenário de Criciúma — HN Notícias</title>
+ 
+  // === Logger de erros ===
+async function reportErrorToSupabase(err) {
+  try {
+    await client.from('client_logs').insert({
+      user_id: userId || null,
+      message: err?.message || String(err),
+      stack: err?.stack || null,
+      current_question: idxInBatch + 1,
+      userAgent: navigator.userAgent
+    });
+  } catch (logErr) {
+    console.warn("Falha ao registrar erro:", logErr);
+  }
+}
+
+// Captura erros globais
+window.addEventListener("error", (ev) => {
+  console.error("Erro global:", ev.error);
+  reportErrorToSupabase(ev.error);
+});
+
+// Também captura erros assíncronos
+window.addEventListener("unhandledrejection", (ev) => {
+  console.error("Promise Rejection:", ev.reason);
+  reportErrorToSupabase(ev.reason);
+});
+
+  
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
