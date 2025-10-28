@@ -42,11 +42,7 @@
     .opt.selected{border-color:var(--gold); background:#fff9e6; box-shadow:0 0 0 3px rgba(201,162,39,.15) inset}
     .opt.correct{border-color:#2e7d32; background:#e8f6ee}
     .opt.wrong{border-color:#d32f2f; animation:shake .28s linear 1}
-    @keyframes shake{
-      0%,100%{transform:translateX(0)}
-      25%{transform:translateX(-4px)}
-      75%{transform:translateX(4px)}
-    }
+    @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 
     .badge{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:800;color:var(--gold-2);border:1px solid var(--border)}
     .feedback{min-height:32px;margin:8px 2px 2px;font-weight:700;padding:8px;border-radius:10px;display:none}
@@ -213,16 +209,12 @@
   (function guardAgainstReload(){
     try {
       const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
-      if (nav && nav.type === 'reload') {
-        location.replace('index.html');
-      }
+      if (nav && nav.type === 'reload') location.replace('index.html');
     } catch (_) {}
     if (performance && performance.navigation && performance.navigation.type === performance.navigation.TYPE_RELOAD) {
       location.replace('index.html');
     }
-    window.addEventListener('pageshow', (e) => {
-      if (e.persisted) location.replace('index.html');
-    });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) location.replace('index.html'); });
   })();
 
   // === CONFIG ===
@@ -280,7 +272,7 @@
   let askedIds = new Set();
 
   // contadores
-  let answeredTotal = 0;         // total de acertos no app (acertos de primeira)
+  let answeredTotal = 0;         // total de acertos no app (apenas de primeira)
   let batch = [];                // perguntas do lote
   let idxInBatch = 0;            // índice da pergunta no lote
   let batchCorrect = 0;          // acertos de primeira do lote
@@ -307,27 +299,57 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
+  // Timeout defensivo para promessas (evita travar UI se rede demorar)
+  async function withTimeout(promise, ms, label='op'){
+    let timer;
+    const timeout = new Promise((_, rej)=>{
+      timer = setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)), ms);
+    });
+    try{
+      const res = await Promise.race([promise, timeout]);
+      clearTimeout(timer);
+      return res;
+    }catch(err){
+      clearTimeout(timer);
+      // logar no Supabase
+      try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent: navigator.userAgent, current_url: window.location.href }); }catch(_){}
+      throw err;
+    }
+  }
+
   // === Supabase writes ===
   async function insertSubmission({ user_id, question_id, first_try_correct }){
     try{
-      const { error } = await client.from('submissions')
-        .insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
+      const { error } = await withTimeout(
+        client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
+        5000,
+        'insertSubmission'
+      );
       if(error) throw error;
-    }catch(e){ console.error('Erro ao gravar submission:', e); reportErrorToSupabase(e); }
+    }catch(e){ console.error('Erro ao gravar submission:', e); /* já logado no withTimeout */ }
   }
 
   async function ensureVoucher(user_id){
     let code = formatVoucherCode(), issuedAt = new Date(), expiresAt = addDays(issuedAt,14);
     for(let i=0;i<5;i++){
-      const { error } = await client.from('vouchers').insert({
-        user_id, code, status:'pendente',
-        issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
-        partner:'Parceiros do projeto'
-      });
+      const { error } = await withTimeout(
+        client.from('vouchers').insert({
+          user_id, code, status:'pendente',
+          issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
+          partner:'Parceiros do projeto'
+        }),
+        6000,
+        'ensureVoucher.insert'
+      ).catch(e=>({ error:e })); // para não quebrar o loop
       if(!error) return { code, issuedAt, expiresAt };
-      if(String(error.message||'').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
-      console.error('Erro ao criar voucher:', error); reportErrorToSupabase(error); break;
+      if(String((error.message||'') + '').toLowerCase().includes('duplicate')){
+        code = formatVoucherCode();
+        continue;
+      }
+      console.warn('Falha ao criar voucher (tentativa continuará/fallback):', error);
+      break;
     }
+    // fallback: retorna mesmo assim (UI mostra código local)
     return { code, issuedAt, expiresAt };
   }
 
@@ -379,7 +401,7 @@
         const hit=optsRaw.find(o=>normalizeText(o.text)===target);
         if(hit) currentCorrectKey=hit.key;
       }
-      if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q.id); }
+      if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q?.id); }
 
       els.options.innerHTML = optsRaw.map(o => `
         <button type="button" class="opt" data-key="${o.key}" aria-pressed="false">
@@ -412,22 +434,14 @@
     try {
       if (key === currentCorrectKey) {
         locked = true;
-        btn.classList.remove('selected');
-        btn.classList.add('correct');
-
-        els.feedback.textContent = '✅ Resposta certa!';
-        els.feedback.className = 'feedback ok';
-        els.btnNext.disabled = false;
-        els.btnTryAgain.disabled = true;
+        btn.classList.remove('selected'); btn.classList.add('correct');
+        els.feedback.textContent = '✅ Resposta certa!'; els.feedback.className = 'feedback ok';
+        els.btnNext.disabled = false; els.btnTryAgain.disabled = true;
 
         const q = batch[idxInBatch];
         askedIds.add(q.id);
 
-        // soma apenas acerto de primeira
-        if (currentAttempts === 1) {
-          batchCorrect++;
-          answeredTotal++;
-        }
+        if (currentAttempts === 1) { batchCorrect++; answeredTotal++; }
 
         await insertSubmission({
           user_id: userId,
@@ -437,12 +451,9 @@
 
         disableOptions();
       } else {
-        btn.classList.remove('selected');
-        btn.classList.add('wrong');
+        btn.classList.remove('selected'); btn.classList.add('wrong');
         setTimeout(() => btn.classList.remove('wrong'), 600);
-
-        els.feedback.textContent = '❌ Não é essa. Tente novamente.';
-        els.feedback.className = 'feedback err';
+        els.feedback.textContent = '❌ Não é essa. Tente novamente.'; els.feedback.className = 'feedback err';
         els.btnTryAgain.disabled = false;
       }
     } catch (e) {
@@ -466,7 +477,6 @@
 
   function startBatch({ categoria=null, dificuldade=null } = {}){
     currentFilter = { categoria, dificuldade };
-
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
     if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
@@ -487,10 +497,13 @@
 
   async function loadAllQuestions(){
     try{
-      const { data, error } = await client
-        .from('questions')
-        .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
-        .eq('ativa', true);
+      const { data, error } = await withTimeout(
+        client.from('questions')
+          .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
+          .eq('ativa', true),
+        7000,
+        'loadAllQuestions'
+      );
       if(error) throw error;
       return shuffle(data || []);
     }catch(e){
@@ -515,11 +528,18 @@
       els.batchStats.textContent = `Você acertou ${batchCorrect} de ${batch.length} neste lote (somente acertos de primeira).`;
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
-      // Parceiros botões
       renderPartners();
 
+      let voucher = null;
+      try {
+        voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher');
+      } catch (e) {
+        // Fallback: gerar um código local e não travar a UI
+        voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: addDays(new Date(),14) };
+        console.warn('ensureVoucher falhou/expirou, usando fallback local:', e?.message||e);
+      }
+
       if(!window.__voucherIssued){
-        const voucher = await ensureVoucher(userId);
         els.voucherCode.textContent = voucher.code;
         els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
         window.__voucherIssued = true;
@@ -555,6 +575,10 @@
     }catch(e){
       console.error('Falha no showFinal:', e);
       reportErrorToSupabase(e);
+      // fallback final imediato (garante que a tela não trave)
+      els.finalTitle.textContent = 'Concluído! 🎉';
+      els.finalSubtitle.textContent = 'Seu código pode demorar um pouco, tente novamente em alguns instantes.';
+      showView('final');
     }
   }
 
@@ -634,9 +658,9 @@
   (async function init(){
     try{
       userId = localStorage.getItem('hn_user_id');
-      if(!userId){ window.location.href='signup.html'; return; }
+      if(!userId){ location.replace('signup.html'); return; }
 
-    allQuestions = await loadAllQuestions();
+      allQuestions = await loadAllQuestions();
       if(!allQuestions.length){
         document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
         document.getElementById('options').innerHTML='';
