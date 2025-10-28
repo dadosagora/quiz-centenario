@@ -537,32 +537,33 @@
 
   els.btnCancelSelector.addEventListener('click', ()=>{ showView('final'); });
 
-  // === Logger de erros (não aparece na tela) ===
-  async function reportErrorToSupabase(err) {
-    try {
-      const message = (err && err.message) ? err.message : String(err);
-      const stack   = (err && err.stack)   ? err.stack   : null;
-      await client.from('client_logs').insert({
-        user_id: userId || null,
-        message,
-        stack,
-        current_question: idxInBatch + 1,
-        userAgent: navigator.userAgent
-      });
-    } catch (logErr) {
-      console.warn("Falha ao registrar erro:", logErr);
-    }
+ // === Logger de erros (não aparece na tela) ===
+async function reportErrorToSupabase(err) {
+  try {
+    const message = (err && err.message) ? err.message : String(err);
+    const stack   = (err && err.stack)   ? err.stack   : null;
+    await client.from('client_logs').insert({
+      user_id: userId || null,
+      message,
+      stack,
+      current_question: idxInBatch + 1,
+      useragent: navigator.userAgent,
+      current_url: window.location.href
+    });
+  } catch (logErr) {
+    console.warn("Falha ao registrar erro:", logErr);
   }
-  window.addEventListener("error", (ev) => {
-    const payload = ev.error || { message: ev.message || 'Erro de janela' };
-    console.error("Erro global:", payload);
-    reportErrorToSupabase(payload);
-  });
-  window.addEventListener("unhandledrejection", (ev) => {
-    const payload = ev.reason || { message: 'Promise Rejection' };
-    console.error("Promise Rejection:", payload);
-    reportErrorToSupabase(payload);
-  });
+}
+window.addEventListener("error", (ev) => {
+  const payload = ev.error || { message: ev.message || 'Erro de janela' };
+  console.error("Erro global:", payload);
+  reportErrorToSupabase(payload);
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  const payload = ev.reason || { message: 'Promise Rejection' };
+  console.error("Promise Rejection:", payload);
+  reportErrorToSupabase(payload);
+});
 
   // === Boot ===
   (async function init(){
