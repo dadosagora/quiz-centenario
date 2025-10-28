@@ -181,6 +181,29 @@
 </div>
 
 <script>
+  /* ===== Proteções contra reload/voltar diretamente no quiz ===== */
+  (function guardAgainstReload(){
+    // 1) Reload direto (padrão moderno)
+    try {
+      const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+      if (nav && nav.type === 'reload') {
+        location.replace('signup.html'); // volta pro fluxo oficial
+      }
+    } catch (_) {}
+
+    // 2) Fallback para APIs antigas
+    if (performance && performance.navigation && performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+      location.replace('signup.html');
+    }
+
+    // 3) Voltar via cache do histórico (bfcache)
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) {
+        location.replace('signup.html');
+      }
+    });
+  })();
+
   // === CONFIG ===
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
@@ -537,33 +560,33 @@
 
   els.btnCancelSelector.addEventListener('click', ()=>{ showView('final'); });
 
- // === Logger de erros (não aparece na tela) ===
-async function reportErrorToSupabase(err) {
-  try {
-    const message = (err && err.message) ? err.message : String(err);
-    const stack   = (err && err.stack)   ? err.stack   : null;
-    await client.from('client_logs').insert({
-      user_id: userId || null,
-      message,
-      stack,
-      current_question: idxInBatch + 1,
-      useragent: navigator.userAgent,
-      current_url: window.location.href
-    });
-  } catch (logErr) {
-    console.warn("Falha ao registrar erro:", logErr);
+  // === Logger de erros (não aparece na tela) ===
+  async function reportErrorToSupabase(err) {
+    try {
+      const message = (err && err.message) ? err.message : String(err);
+      const stack   = (err && err.stack)   ? err.stack   : null;
+      await client.from('client_logs').insert({
+        user_id: userId || null,
+        message,
+        stack,
+        current_question: idxInBatch + 1,
+        useragent: navigator.userAgent,
+        current_url: window.location.href
+      });
+    } catch (logErr) {
+      console.warn("Falha ao registrar erro:", logErr);
+    }
   }
-}
-window.addEventListener("error", (ev) => {
-  const payload = ev.error || { message: ev.message || 'Erro de janela' };
-  console.error("Erro global:", payload);
-  reportErrorToSupabase(payload);
-});
-window.addEventListener("unhandledrejection", (ev) => {
-  const payload = ev.reason || { message: 'Promise Rejection' };
-  console.error("Promise Rejection:", payload);
-  reportErrorToSupabase(payload);
-});
+  window.addEventListener("error", (ev) => {
+    const payload = ev.error || { message: ev.message || 'Erro de janela' };
+    console.error("Erro global:", payload);
+    reportErrorToSupabase(payload);
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    const payload = ev.reason || { message: 'Promise Rejection' };
+    console.error("Promise Rejection:", payload);
+    reportErrorToSupabase(payload);
+  });
 
   // === Boot ===
   (async function init(){
