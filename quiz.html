@@ -217,11 +217,11 @@
     window.addEventListener('pageshow', (e) => { if (e.persisted) location.replace('index.html'); });
   })();
 
-  // === CONFIG ===
-  const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
-  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-  const PDF_URL = "";
-  const BATCH_SIZE = 10;
+ // === CONFIG ===
+const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
+const BATCH_SIZE = 10;
 
   // Instagram dos parceiros
   const PARTNERS = [
@@ -561,13 +561,21 @@
       els.progressBar.style.width = '100%';
 
       els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
-      if(!(PDF_URL && /^https?:\/\//i.test(PDF_URL))){
-        els.btnDownload.setAttribute('disabled','true');
-        els.btnDownload.textContent = 'Baixar o livro (em breve)';
-      } else {
-        els.btnDownload.removeAttribute('https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf');
-        els.btnDownload.textContent = 'Baixar o livro';
-      }
+      // Botão de download do PDF
+if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
+  els.btnDownload.href = PDF_URL;
+  els.btnDownload.removeAttribute('disabled');     // caso tenha sido marcado antes
+  els.btnDownload.setAttribute('aria-disabled', 'false');
+  els.btnDownload.setAttribute('rel', 'noopener'); // segurança
+  els.btnDownload.setAttribute('download', 'livro_centenario.pdf'); // opcional: forçar salvar
+  els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
+} else {
+  els.btnDownload.href = '#';
+  els.btnDownload.setAttribute('disabled', 'true');
+  els.btnDownload.setAttribute('aria-disabled', 'true');
+  els.btnDownload.textContent = 'Baixar o livro (em breve)';
+}
+
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
       const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
