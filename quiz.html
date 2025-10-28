@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quiz do Centenário de Criciúma — HN Notícias</title>
- 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
       --bg:#ffffff; --text:#111; --muted:#555;
@@ -40,8 +39,6 @@
     }
     .opt:hover{border-color:var(--opt-hover);transform:translateY(-1px)}
     .opt.disabled{opacity:.6;pointer-events:none}
-
-    /* Estados visuais tipo “Show do Milhão” */
     .opt.selected{border-color:var(--gold); background:#fff9e6; box-shadow:0 0 0 3px rgba(201,162,39,.15) inset}
     .opt.correct{border-color:#2e7d32; background:#e8f6ee}
     .opt.wrong{border-color:#d32f2f; animation:shake .28s linear 1}
@@ -113,7 +110,6 @@
         <div id="options" class="options"></div>
         <div id="feedback" class="feedback"></div>
         <div class="actions">
-          <!-- (Sem botão Pular) -->
           <button class="btn secondary" id="btnTryAgain" type="button" disabled>Tentar novamente</button>
           <button class="btn" id="btnNext" type="button" disabled>Próxima</button>
         </div>
@@ -131,21 +127,19 @@
           <div class="note">Parceiro: Mina Wine Bar – Praça do Congresso</div>
         </div>
 
-        <!-- Baixar / Copiar -->
+        <!-- NOVO: placar do lote -->
+        <p class="note" id="batchStats"></p>
+
         <div class="btn-row">
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
           <button id="btnCopy" class="btn secondary" type="button">Copiar código</button>
         </div>
 
-        <!-- Texto de progresso -->
         <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
-        <!-- Ações -->
         <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
           <button class="btn" id="btnContinue" type="button">Continuar respondendo</button>
-          <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">
-            📲 Compartilhe com seus amigos
-          </a>
+          <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">📲 Compartilhe com seus amigos</a>
           <a class="btn secondary" href="index.html">Encerrar</a>
           <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
         </div>
@@ -188,7 +182,7 @@
 
 <script>
   // === CONFIG ===
-  const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
+  const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "";
   const BATCH_SIZE = 10;
@@ -199,50 +193,54 @@
   const els = {
     progressWrap: document.getElementById('progressWrap'),
     progressText: document.getElementById('progressText'),
-    progressBar: document.getElementById('progressBar'),
-    question: document.getElementById('question'),
-    options: document.getElementById('options'),
-    feedback: document.getElementById('feedback'),
-    btnTryAgain: document.getElementById('btnTryAgain'),
-    btnNext: document.getElementById('btnNext'),
-    quizView: document.getElementById('quizView'),
-    finalView: document.getElementById('finalView'),
+    progressBar:  document.getElementById('progressBar'),
+    question:     document.getElementById('question'),
+    options:      document.getElementById('options'),
+    feedback:     document.getElementById('feedback'),
+    btnTryAgain:  document.getElementById('btnTryAgain'),
+    btnNext:      document.getElementById('btnNext'),
+    quizView:     document.getElementById('quizView'),
+    finalView:    document.getElementById('finalView'),
     selectorView: document.getElementById('selectorView'),
-    voucherBox: document.getElementById('voucherBox'),
-    voucherCode: document.getElementById('voucherCode'),
+    voucherBox:   document.getElementById('voucherBox'),
+    voucherCode:  document.getElementById('voucherCode'),
     voucherValidity: document.getElementById('voucherValidity'),
-    btnDownload: document.getElementById('btnDownload'),
-    btnCopy: document.getElementById('btnCopy'),
-    btnContinue: document.getElementById('btnContinue'),
-    continueRow: document.getElementById('continueRow'),
-    finalTitle: document.getElementById('finalTitle'),
-    finalSubtitle: document.getElementById('finalSubtitle'),
-    answeredCount: document.getElementById('answeredCount'),
+    btnDownload:  document.getElementById('btnDownload'),
+    btnCopy:      document.getElementById('btnCopy'),
+    btnContinue:  document.getElementById('btnContinue'),
+    continueRow:  document.getElementById('continueRow'),
+    finalTitle:   document.getElementById('finalTitle'),
+    finalSubtitle:document.getElementById('finalSubtitle'),
+    answeredCount:document.getElementById('answeredCount'),
     selCategoria: document.getElementById('selCategoria'),
     selDificuldade: document.getElementById('selDificuldade'),
     selectorWarn: document.getElementById('selectorWarn'),
     btnStartFiltered: document.getElementById('btnStartFiltered'),
     btnCancelSelector: document.getElementById('btnCancelSelector'),
-    btnShare: document.getElementById('btnShare'),
+    btnShare:     document.getElementById('btnShare'),
+    batchStats:   document.getElementById('batchStats'),
   };
 
   let userId = null;
   let allQuestions = [];
-  let answeredTotal = 0;   // só incrementa em ACERTO
   let askedIds = new Set();
-  let voucherIssued = false;
 
-  let batch = [];
-  let idxInBatch = 0;
+  // contadores
+  let answeredTotal = 0;         // total de acertos no app
+  let batch = [];                // perguntas do lote
+  let idxInBatch = 0;            // índice da pergunta no lote
+  let batchCorrect = 0;          // NOVO: acertos do lote
 
-  // filtro do lote atual (mantido para o seletor)
+  // filtro atual (para o seletor)
   let currentFilter = { categoria: null, dificuldade: null };
 
   // estado da pergunta atual
   let currentCorrectKey = '';
-  let currentAttempts = 0;
-  let locked = false;
+  let currentAttempts   = 0;
+  let locked            = false;
+  let handlingClick     = false; // debounce mobile
 
+  // === Utils ===
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
   const fmtDateISO = (d)=>d.toISOString();
   const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
@@ -255,11 +253,13 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
+  // === Supabase writes ===
   async function insertSubmission({ user_id, question_id, first_try_correct }){
-    const { error } = await client
-      .from('submissions')
-      .insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
-    if(error) console.error('Erro ao gravar submission:', error);
+    try{
+      const { error } = await client.from('submissions')
+        .insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) });
+      if(error) throw error;
+    }catch(e){ console.error('Erro ao gravar submission:', e); reportErrorToSupabase(e); }
   }
 
   async function ensureVoucher(user_id){
@@ -272,11 +272,12 @@
       });
       if(!error) return { code, issuedAt, expiresAt };
       if(String(error.message||'').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
-      console.error('Erro ao criar voucher:', error); break;
+      console.error('Erro ao criar voucher:', error); reportErrorToSupabase(error); break;
     }
     return { code, issuedAt, expiresAt };
   }
 
+  // === UI helpers ===
   function updateProgress(){
     const total = Math.max(batch.length,1);
     els.progressWrap.style.display='flex';
@@ -291,56 +292,61 @@
       el.removeAttribute('aria-pressed');
     });
   }
-
   function disableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.add('disabled'));}
   function enableOptions(){[...els.options.querySelectorAll('.opt')].forEach(el=>el.classList.remove('disabled'));}
 
   function renderQuestion(){
-    const q = batch[idxInBatch];
-    updateProgress();
+    try{
+      const q = batch[idxInBatch];
+      if(!q){ showFinal(); return; }
+      updateProgress();
 
-    // reset total
-    currentAttempts = 0;
-    locked = false;
-    els.feedback.textContent = '';
-    els.feedback.className = 'feedback';
+      currentAttempts = 0;
+      locked = false;
+      els.feedback.textContent = '';
+      els.feedback.className = 'feedback';
 
-    els.options.innerHTML = ''; // limpa resquícios
-    clearOptStates();
+      els.options.innerHTML = '';
+      clearOptStates();
 
-    els.question.textContent = q.enunciado;
-    els.btnTryAgain.disabled = true;
-    els.btnNext.disabled = true;
+      els.question.textContent = q.enunciado || '';
+      els.btnTryAgain.disabled = true;
+      els.btnNext.disabled = true;
 
-    // correta pode vir A/B/C/D ou texto
-    currentCorrectKey = normalizeKey(q.correta);
-    const optsRaw = [
-      {key:'a',label:'A',text:q.alternativa_a},
-      {key:'b',label:'B',text:q.alternativa_b},
-      {key:'c',label:'C',text:q.alternativa_c},
-      {key:'d',label:'D',text:q.alternativa_d},
-    ];
-    if(!['a','b','c','d'].includes(currentCorrectKey) && q.correta){
-      const target=normalizeText(q.correta);
-      const hit=optsRaw.find(o=>normalizeText(o.text)===target);
-      if(hit) currentCorrectKey=hit.key;
+      currentCorrectKey = normalizeKey(q.correta);
+      const optsRaw = [
+        {key:'a',label:'A',text:q.alternativa_a||''},
+        {key:'b',label:'B',text:q.alternativa_b||''},
+        {key:'c',label:'C',text:q.alternativa_c||''},
+        {key:'d',label:'D',text:q.alternativa_d||''},
+      ];
+      if(!['a','b','c','d'].includes(currentCorrectKey) && q.correta){
+        const target=normalizeText(q.correta);
+        const hit=optsRaw.find(o=>normalizeText(o.text)===target);
+        if(hit) currentCorrectKey=hit.key;
+      }
+      if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q.id); }
+
+      els.options.innerHTML = optsRaw.map(o => `
+        <button type="button" class="opt" data-key="${o.key}" aria-pressed="false">
+          <div class="badge">${o.label}</div><div>${o.text}</div>
+        </button>
+      `).join('');
+
+      enableOptions();
+    }catch(e){
+      console.error('Falha no renderQuestion:', e);
+      reportErrorToSupabase(e);
     }
-    if(!['a','b','c','d'].includes(currentCorrectKey)){ currentCorrectKey='a'; console.warn('Pergunta sem correta:', q.id); }
-
-    els.options.innerHTML = optsRaw.map(o => `
-      <button type="button" class="opt" data-key="${o.key}" aria-pressed="false">
-        <div class="badge">${o.label}</div><div>${o.text}</div>
-      </button>
-    `).join('');
-
-    enableOptions();
   }
 
-  // Seleção robusta no mobile (click)
+  // Clique nas opções (com debounce p/ mobile)
   els.options.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('.opt');
     if (!btn || !els.options.contains(btn)) return;
     if (locked) return;
+    if (handlingClick) return;
+    handlingClick = true; setTimeout(()=>handlingClick=false, 120);
 
     clearOptStates();
     btn.classList.add('selected');
@@ -363,6 +369,7 @@
         const q = batch[idxInBatch];
         askedIds.add(q.id);
         answeredTotal++;
+        batchCorrect++; // NOVO: contar acerto do lote
 
         await insertSubmission({
           user_id: userId,
@@ -382,6 +389,7 @@
       }
     } catch (e) {
       console.error('Falha ao processar resposta:', e);
+      reportErrorToSupabase(e);
     }
   });
 
@@ -394,7 +402,7 @@
   function populateSelector(){
     const cats = computeUnique(allQuestions, 'categoria');
     const difs = computeUnique(allQuestions, 'dificuldade');
-    els.selCategoria.innerHTML = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+    els.selCategoria.innerHTML   = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
     els.selDificuldade.innerHTML = difs.map(d=>`<option value="${d}">${d}</option>`).join('');
   }
 
@@ -408,6 +416,7 @@
 
     batch = pool.slice(0, BATCH_SIZE);
     idxInBatch = 0;
+    batchCorrect = 0; // NOVO: zera placar do lote
 
     if(batch.length === 0){
       els.selectorWarn.style.display = 'block';
@@ -419,51 +428,69 @@
   }
 
   async function loadAllQuestions(){
-    const { data, error } = await client
-      .from('questions')
-      .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
-      .eq('ativa', true);
-    if(error){ console.error('Erro ao buscar perguntas:', error); return []; }
-    return shuffle(data || []);
+    try{
+      const { data, error } = await client
+        .from('questions')
+        .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
+        .eq('ativa', true);
+      if(error) throw error;
+      return shuffle(data || []);
+    }catch(e){
+      console.error('Erro ao buscar perguntas:', e);
+      reportErrorToSupabase(e);
+      return [];
+    }
   }
 
   async function showFinal(){
-    showView('final');
+    try{
+      showView('final');
 
-    if(!voucherIssued){
-      const voucher = await ensureVoucher(userId);
-      els.voucherCode.textContent = voucher.code;
-      els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
-      voucherIssued = true;
-      els.voucherBox.style.display = 'block';
-      els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
-      els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar a revista.';
-    }else{
-      els.voucherBox.style.display = 'none';
-      els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
-      els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
+      // NOVO: placar do lote
+      els.batchStats.textContent = `Você acertou ${batchCorrect} de ${batch.length} neste lote.`;
+
+      if(els.voucherBox && els.voucherBox.style.display === 'none'){
+        // nada
+      }
+
+      if(!window.__voucherIssued){
+        const voucher = await ensureVoucher(userId);
+        els.voucherCode.textContent = voucher.code;
+        els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
+        window.__voucherIssued = true;
+        els.voucherBox.style.display = 'block';
+        els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
+        els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar a revista.';
+      } else {
+        els.voucherBox.style.display = 'none';
+        els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
+        els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
+      }
+
+      const totalAtivas = allQuestions.length;
+      els.answeredCount.textContent = `Você já respondeu ${answeredTotal} de ${totalAtivas} perguntas disponíveis.`;
+
+      const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
+      els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
+
+      els.progressBar.style.width = '100%';
+
+      els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
+      if(!(PDF_URL && /^https?:\/\//i.test(PDF_URL))){
+        els.btnDownload.setAttribute('disabled','true');
+        els.btnDownload.textContent = 'Baixar o livro (em breve)';
+      } else {
+        els.btnDownload.removeAttribute('disabled');
+        els.btnDownload.textContent = 'Baixar o livro';
+      }
+
+      const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
+      const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
+      els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+    }catch(e){
+      console.error('Falha no showFinal:', e);
+      reportErrorToSupabase(e);
     }
-
-    const totalAtivas = allQuestions.length;
-    els.answeredCount.textContent = `Você já respondeu ${answeredTotal} de ${totalAtivas} perguntas disponíveis.`;
-
-    const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
-    els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
-
-    els.progressBar.style.width = '100%';
-
-    els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
-    if(!(PDF_URL && /^https?:\/\//i.test(PDF_URL))){
-      els.btnDownload.setAttribute('disabled','true');
-      els.btnDownload.textContent = 'Baixar o livro (em breve)';
-    } else {
-      els.btnDownload.removeAttribute('disabled');
-      els.btnDownload.textContent = 'Baixar o livro';
-    }
-
-    const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
-    const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
-    els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
   }
 
   function showView(name){
@@ -472,7 +499,7 @@
     els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
   }
 
-  // === Eventos auxiliares ===
+  // === Botões ===
   els.btnTryAgain.addEventListener('click',()=>{
     enableOptions();
     clearOptStates();
@@ -502,7 +529,7 @@
   });
 
   els.btnStartFiltered.addEventListener('click', ()=>{
-    const categoria = els.selCategoria.value;
+    const categoria   = els.selCategoria.value;
     const dificuldade = els.selDificuldade.value;
     els.selectorWarn.style.display = 'none';
     startBatch({ categoria, dificuldade });
@@ -510,46 +537,51 @@
 
   els.btnCancelSelector.addEventListener('click', ()=>{ showView('final'); });
 
-  // === Logger de erros ===
-async function reportErrorToSupabase(err) {
-  try {
-    await client.from('client_logs').insert({
-      user_id: userId || null,
-      message: err?.message || String(err),
-      stack: err?.stack || null,
-      current_question: idxInBatch + 1,
-      userAgent: navigator.userAgent
-    });
-  } catch (logErr) {
-    console.warn("Falha ao registrar erro:", logErr);
-  }
-}
-
-// Captura erros globais
-window.addEventListener("error", (ev) => {
-  console.error("Erro global:", ev.error);
-  reportErrorToSupabase(ev.error);
-});
-
-// Também captura erros assíncronos
-window.addEventListener("unhandledrejection", (ev) => {
-  console.error("Promise Rejection:", ev.reason);
-  reportErrorToSupabase(ev.reason);
-}); 
-  
-  // === Boot ===
-    (async function init(){
-    userId = localStorage.getItem('hn_user_id');
-    if(!userId){ window.location.href='signup.html'; return; }
-
-    allQuestions = await loadAllQuestions();
-    if(!allQuestions.length){
-      document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
-      document.getElementById('options').innerHTML='';
-      els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
-      return;
+  // === Logger de erros (não aparece na tela) ===
+  async function reportErrorToSupabase(err) {
+    try {
+      const message = (err && err.message) ? err.message : String(err);
+      const stack   = (err && err.stack)   ? err.stack   : null;
+      await client.from('client_logs').insert({
+        user_id: userId || null,
+        message,
+        stack,
+        current_question: idxInBatch + 1,
+        userAgent: navigator.userAgent
+      });
+    } catch (logErr) {
+      console.warn("Falha ao registrar erro:", logErr);
     }
-    startBatch();
+  }
+  window.addEventListener("error", (ev) => {
+    const payload = ev.error || { message: ev.message || 'Erro de janela' };
+    console.error("Erro global:", payload);
+    reportErrorToSupabase(payload);
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    const payload = ev.reason || { message: 'Promise Rejection' };
+    console.error("Promise Rejection:", payload);
+    reportErrorToSupabase(payload);
+  });
+
+  // === Boot ===
+  (async function init(){
+    try{
+      userId = localStorage.getItem('hn_user_id');
+      if(!userId){ window.location.href='signup.html'; return; }
+
+      allQuestions = await loadAllQuestions();
+      if(!allQuestions.length){
+        document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
+        document.getElementById('options').innerHTML='';
+        els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
+        return;
+      }
+      startBatch();
+    }catch(e){
+      console.error('Falha no init:', e);
+      reportErrorToSupabase(e);
+    }
   })();
 </script>
 </body>
