@@ -149,10 +149,9 @@
           <h3>Seu código de retirada</h3>
           <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
           <div class="note" id="voucherValidity">Válido até —</div>
-          <div class="note" id="voucherPartnersNote">Parceiros: Mina Café &amp; Vinho e Café do Imigrante</div>
         </div>
 
-        <p class="note" id="batchStats" style="margin-top:8px;"></p>
+        <!-- removido batchStats e voucherPartnersNote -->
 
         <div class="btn-row" id="downloadRow">
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
@@ -205,7 +204,6 @@
 </div>
 
 <script>
-  /* ===== Proteções contra reload/voltar diretamente no quiz ===== */
   (function guardAgainstReload(){
     try {
       const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
@@ -217,21 +215,19 @@
     window.addEventListener('pageshow', (e) => { if (e.persisted) location.replace('index.html'); });
   })();
 
-  // === CONFIG ===
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
   const BATCH_SIZE = 10;
 
-  // Instagram dos parceiros
+  // Parceiros com nomes atualizados
   const PARTNERS = [
-    { name: "Mina Café & Vinho – Praça do Congresso", url: "https://www.instagram.com/minacafevinho/" },
-    { name: "Café do Imigrante",                      url: "https://www.instagram.com/cafe_do_imigrante/" }
+    { name: "Mina Café & Vinho - Praça do Congresso (Centro)", url: "https://www.instagram.com/minacafevinho/" },
+    { name: "Café do Imigrante - Parque do Imigrante (Rio Maina)", url: "https://www.instagram.com/cafe_do_imigrante/" }
   ];
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  // === Estado ===
   const els = {
     progressWrap: document.getElementById('progressWrap'),
     progressText: document.getElementById('progressText'),
@@ -260,11 +256,8 @@
     btnStartFiltered: document.getElementById('btnStartFiltered'),
     btnCancelSelector: document.getElementById('btnCancelSelector'),
     btnShare:     document.getElementById('btnShare'),
-    batchStats:   document.getElementById('batchStats'),
     scoreText:    document.getElementById('scoreText'),
-    scoreBox:     document.getElementById('scoreBox'),
     partnersRow:  document.getElementById('partnersRow'),
-    voucherPartnersNote: document.getElementById('voucherPartnersNote'),
     downloadRow:  document.getElementById('downloadRow'),
   };
 
@@ -272,22 +265,18 @@
   let allQuestions = [];
   let askedIds = new Set();
 
-  // contadores
-  let answeredTotal = 0;         // acertos de primeira no app
-  let batch = [];                // perguntas do lote
-  let idxInBatch = 0;            // índice da pergunta no lote
-  let batchCorrect = 0;          // acertos de primeira do lote
+  let answeredTotal = 0; // acertos de primeira
+  let batch = [];
+  let idxInBatch = 0;
+  let batchCorrect = 0;
 
-  // filtro atual (para o seletor)
   let currentFilter = { categoria: null, dificuldade: null };
 
-  // estado da pergunta atual
   let currentCorrectKey = '';
   let currentAttempts   = 0;
   let locked            = false;
-  let handlingClick     = false; // debounce mobile
+  let handlingClick     = false;
 
-  // === Utils ===
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
   const fmtDateISO = (d)=>d.toISOString();
   const addDays=(d,days)=>{const t=new Date(d);t.setDate(t.getDate()+days);return t;};
@@ -300,7 +289,6 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  // Timeout defensivo
   async function withTimeout(promise, ms, label='op'){
     let timer;
     const timeout = new Promise((_, rej)=>{
@@ -317,13 +305,11 @@
     }
   }
 
-  // === Supabase writes ===
   async function insertSubmission({ user_id, question_id, first_try_correct }){
     try{
       const { error } = await withTimeout(
         client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
-        5000,
-        'insertSubmission'
+        5000,'insertSubmission'
       );
       if(error) throw error;
     }catch(e){ console.error('Erro ao gravar submission:', e); }
@@ -338,21 +324,16 @@
           issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
           partner:'Parceiros do projeto'
         }),
-        6000,
-        'ensureVoucher.insert'
+        6000,'ensureVoucher.insert'
       ).catch(e=>({ error:e }));
       if(!error) return { code, issuedAt, expiresAt };
-      if(String((error.message||'') + '').toLowerCase().includes('duplicate')){
-        code = formatVoucherCode();
-        continue;
-      }
-      console.warn('Falha ao criar voucher, usando fallback.');
+      if(String((error.message||'') + '').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
+      console.warn('Falha ao criar voucher, fallback local.');
       break;
     }
     return { code, issuedAt, expiresAt };
   }
 
-  // === UI helpers ===
   function updateProgress(){
     const total = Math.max(batch.length,1);
     els.progressWrap.style.display='flex';
@@ -415,7 +396,6 @@
     }
   }
 
-  // Clique nas opções (com debounce p/ mobile)
   els.options.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('.opt');
     if (!btn || !els.options.contains(btn)) return;
@@ -475,7 +455,6 @@
   }
 
   function startBatch({ categoria=null, dificuldade=null } = {}){
-    currentFilter = { categoria, dificuldade };
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
     if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
@@ -500,8 +479,7 @@
         client.from('questions')
           .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
           .eq('ativa', true),
-        7000,
-        'loadAllQuestions'
+        7000,'loadAllQuestions'
       );
       if(error) throw error;
       return shuffle(data || []);
@@ -516,55 +494,48 @@
     els.partnersRow.innerHTML = PARTNERS.map(p => `
       <a href="${p.url}" target="_blank" rel="noopener" aria-label="${p.name} no Instagram">📸 ${p.name}</a>
     `).join('');
-    els.voucherPartnersNote.textContent = `Parceiros: ${PARTNERS.map(p=>p.name).join(' e ')}`;
   }
 
   async function showFinal(){
     try{
       showView('final');
 
-      // Placar do lote (acertos de primeira)
-      els.batchStats.textContent = `Você acertou ${batchCorrect} de ${batch.length} neste lote (somente acertos de primeira).`;
+      // nota do lote no topo
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
-      // Decide se é o primeiro lote (voucher ainda não emitido)
       const primeiroLote = !window.__voucherIssued;
 
-      // Renderiza parceiros
-      renderPartners();
-
-      // Voucher só no primeiro lote
+      // parceiros e voucher apenas no primeiro lote
       if (primeiroLote) {
+        renderPartners();
+        els.partnersRow.style.display = 'flex';
+
         let voucher;
-        try {
-          voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher');
-        } catch (e) {
-          voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: addDays(new Date(),14) };
-          console.warn('ensureVoucher falhou/expirou, usando fallback local:', e?.message||e);
-        }
+        try { voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher'); }
+        catch (e) { voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: addDays(new Date(),14) }; }
+
         els.voucherCode.textContent = voucher.code;
         els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
         window.__voucherIssued = true;
+
         els.voucherBox.style.display = 'block';
-        els.partnersRow.style.display = 'flex';
         els.downloadRow.style.display = 'flex';
         els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
         els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar a revista.';
       } else {
-        // Esconde no(s) lote(s) seguinte(s)
-        els.voucherBox.style.display = 'none';
         els.partnersRow.style.display = 'none';
+        els.voucherBox.style.display = 'none';
         els.downloadRow.style.display = 'none';
         els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
         els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
       }
 
-      // Contador geral: total de perguntas concluídas (não só acertos de primeira)
+      // contador geral: total de perguntas concluídas
       const totalRespondidas = askedIds.size;
       const totalAtivas = allQuestions.length;
       els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
 
-      // Botão de download do PDF (só fica visível no primeiro lote; já controlado por downloadRow)
+      // PDF
       if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
         els.btnDownload.href = PDF_URL;
         els.btnDownload.removeAttribute('disabled');
@@ -579,10 +550,8 @@
         els.btnDownload.textContent = 'Baixar o livro (em breve)';
       }
 
-      // Mostra "Continuar respondendo" se ainda houver perguntas restantes
       const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
       els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
-
       els.progressBar.style.width = '100%';
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
@@ -603,12 +572,10 @@
     els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
   }
 
-  // === Botões ===
+  // botões
   els.btnTryAgain.addEventListener('click',()=>{
-    enableOptions();
-    clearOptStates();
-    els.feedback.textContent='';
-    els.feedback.className='feedback';
+    enableOptions(); clearOptStates();
+    els.feedback.textContent=''; els.feedback.className='feedback';
     els.btnTryAgain.disabled=true;
   });
 
@@ -627,9 +594,7 @@
   });
 
   els.btnContinue.addEventListener('click', ()=>{
-    populateSelector();
-    els.selectorWarn.style.display = 'none';
-    showView('selector');
+    populateSelector(); els.selectorWarn.style.display = 'none'; showView('selector');
   });
 
   els.btnStartFiltered.addEventListener('click', ()=>{
@@ -641,15 +606,13 @@
 
   els.btnCancelSelector.addEventListener('click', ()=>{ showView('final'); });
 
-  // === Logger de erros (não aparece na tela) ===
   async function reportErrorToSupabase(err) {
     try {
       const message = (err && err.message) ? err.message : String(err);
       const stack   = (err && err.stack)   ? err.stack   : null;
       await client.from('client_logs').insert({
         user_id: userId || null,
-        message,
-        stack,
+        message, stack,
         current_question: idxInBatch + 1,
         useragent: navigator.userAgent,
         current_url: window.location.href
@@ -669,7 +632,6 @@
     reportErrorToSupabase(payload);
   });
 
-  // === Boot ===
   (async function init(){
     try{
       userId = localStorage.getItem('hn_user_id');
