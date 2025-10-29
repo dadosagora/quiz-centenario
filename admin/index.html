@@ -89,23 +89,23 @@
         <button class="btn secondary" onclick="switchTab('participants')">🔎 Buscar participantes</button>
         <button class="btn secondary" onclick="switchTab('vouchers')">🏷️ Validar retirada</button>
       </div>
-      <div class="muted">Métricas rápidas (últimos 7 dias)</div>
+      <div class="muted">Métricas gerais (todo o período)</div>
 
       <!-- KPIs -->
       <div class="kpi-grid">
         <div class="kpi"><div class="label">Perguntas ativas</div><div id="kpi-questions" class="value">—</div></div>
-        <div class="kpi"><div class="label">Participantes</div><div id="kpi-users" class="value">—</div></div>
-        <div class="kpi"><div class="label">Vouchers emitidos</div><div id="kpi-v7" class="value">—</div></div>
-        <div class="kpi"><div class="label">Retiradas</div><div id="kpi-r7" class="value">—</div></div>
+        <div class="kpi"><div class="label">Participantes (total)</div><div id="kpi-users" class="value">—</div></div>
+        <div class="kpi"><div class="label">Vouchers emitidos (total)</div><div id="kpi-v7" class="value">—</div></div>
+        <div class="kpi"><div class="label">Retiradas (total)</div><div id="kpi-r7" class="value">—</div></div>
       </div>
     </div>
 
     <div class="dash-split">
       <div class="card">
-        <h2>Parceiros — emitidos x retirados</h2>
+        <h2>Parceiros — emitidos x retirados (total)</h2>
         <div style="overflow:auto">
           <table>
-            <thead><tr><th>Parceiro</th><th>Emitidos (30d)</th><th>Retirados (30d)</th></tr></thead>
+            <thead><tr><th>Parceiro</th><th>Emitidos</th><th>Retirados</th></tr></thead>
             <tbody id="t-partners"><tr><td colspan="3" class="muted">Carregando…</td></tr></tbody>
           </table>
         </div>
@@ -254,7 +254,7 @@
   }
   function esc(s){ return String(s??'').replace(/[<>&"]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c])); }
   function formatDate(d){ if(!d) return ''; const dt = new Date(d); return dt.toLocaleString('pt-BR'); }
-  function badgeStatus(s){ const map = {pendente:'A retirar', retirado:'Retirado', exp irado:'Expirado'}; return `<span class="chip">${map[s]||s}</span>`; }
+  function badgeStatus(s){ const map = { pendente:'A retirar', retirado:'Retirado', expirado:'Expirado' }; return `<span class="chip">${map[s]||s}</span>`; }
   function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
   // ====== TABS ======
@@ -314,79 +314,56 @@
 <!-- === /Admin API Helper === -->
 
 <script>
-  // ====== DASHBOARD (KPIs + parceiros + últimos participantes) ======
+  // ====== DASHBOARD (totais + resiliência) ======
   async function loadDash(){
     try{
-      const since7 = Date.now() - 7*24*60*60*1000;
-      const since30 = Date.now() - 30*24*60*60*1000;
-
-      const [{items: qs}, {items: ps}, {items: vs}] = await Promise.all([
+      const [qRes, pRes, vRes] = await Promise.allSettled([
         AdminAPI.listQuestions({}),
         AdminAPI.listParticipants(""),
         AdminAPI.listVouchers({})
       ]);
 
-      // KPIs
+      const qs = (qRes.status==='fulfilled' && Array.isArray(qRes.value?.items)) ? qRes.value.items : [];
+      const ps = (pRes.status==='fulfilled' && Array.isArray(pRes.value?.items)) ? pRes.value.items : [];
+      const vs = (vRes.status==='fulfilled' && Array.isArray(vRes.value?.items)) ? vRes.value.items : [];
+
+      // KPIs (PERÍODO INTEIRO)
       const actives = qs.filter(q=>q.ativa).length;
       $('kpi-questions').textContent = `${actives} / ${qs.length}`;
+      $('kpi-users').textContent     = String(ps.length);
+      $('kpi-v7').textContent        = String(vs.length);
+      const redeemedTotal            = vs.filter(v=>v.status==='retirado').length;
+      $('kpi-r7').textContent        = String(redeemedTotal);
 
-      // participantes: total últimos 7 dias (cuidado: endpoint pode paginar)
-      const users7 = (ps||[]).filter(u=>{
-        const t = new Date(u.created_at).getTime();
-        return isFinite(t) && t >= since7;
-      }).length;
-      $('kpi-users').textContent = users7.toString();
-
-      // vouchers emitidos/retirados em 7d
-      const v7 = (vs||[]).filter(v=>{
-        const t = new Date(v.issued_at).getTime();
-        return isFinite(t) && t >= since7;
-      }).length;
-      const r7 = (vs||[]).filter(v=>{
-        const t = new Date(v.redeemed_at||v.updated_at).getTime();
-        return v.status==='retirado' && isFinite(t) && t >= since7;
-      }).length;
-      $('kpi-v7').textContent = v7.toString();
-      $('kpi-r7').textContent = r7.toString();
-
-      // Parceiros (30 dias)
+      // Parceiros (totais)
       const byPartner = {};
-      for(const v of (vs||[])){
-        const issuedT = new Date(v.issued_at).getTime();
-        const redeemedT = new Date(v.redeemed_at||0).getTime();
+      for (const v of vs){
         const p = v.partner || '(sem nome)';
-        if(!byPartner[p]) byPartner[p] = {issued:0, redeemed:0};
-        if(isFinite(issuedT) && issuedT >= since30) byPartner[p].issued++;
-        if(v.status==='retirado' && isFinite(redeemedT) && redeemedT >= since30) byPartner[p].redeemed++;
+        if(!byPartner[p]) byPartner[p] = { issued:0, redeemed:0 };
+        byPartner[p].issued++;
+        if(v.status==='retirado') byPartner[p].redeemed++;
       }
-      const rows = Object.entries(byPartner)
-        .sort((a,b)=> (b[1].redeemed - a[1].redeemed));
+      const rows = Object.entries(byPartner).sort((a,b)=>b[1].redeemed - a[1].redeemed);
       $('t-partners').innerHTML = rows.length
         ? rows.map(([name,agg])=>`<tr><td>${esc(name)}</td><td>${agg.issued}</td><td>${agg.redeemed}</td></tr>`).join('')
         : `<tr><td colspan="3" class="muted">Sem dados</td></tr>`;
 
       // Últimos participantes (10)
-      const last = (ps||[])
-        .slice() // copia
-        .sort((a,b)=> new Date(b.created_at)-new Date(a.created_at))
-        .slice(0,10);
+      const last = ps.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10);
       $('ul-recent').innerHTML = last.length
         ? last.map(u=>`<li style="padding:6px 0;border-top:1px solid #eee">
             <strong>${esc(u.nome||'—')}</strong> · ${esc(u.cidade||'—')}
             <div class="muted">${formatDate(u.created_at)}</div>
           </li>`).join('')
-        : `<li class="muted">Nenhum participante recente</li>`;
+        : `<li class="muted">Nenhum participante cadastrado.</li>`;
 
     }catch(err){
       console.error('Falha no dashboard', err);
-      $('t-partners').innerHTML = `<tr><td colspan="3" class="warn">Erro: ${esc(err.message)}</td></tr>`;
-      $('ul-recent').innerHTML = `<li class="warn">Erro: ${esc(err.message)}</li>`;
-      ['kpi-questions','kpi-users','kpi-v7','kpi-r7'].forEach(id=>$(id).textContent='—');
+      ['kpi-questions','kpi-users','kpi-v7','kpi-r7'].forEach(id => $(id).textContent = '—');
+      $('t-partners').innerHTML = `<tr><td colspan="3" class="warn">Erro ao carregar</td></tr>`;
+      $('ul-recent').innerHTML  = `<li class="warn">Erro ao carregar</li>`;
     }
   }
-
-  // ====== KPIs antigos (mantido para compat) ======
-  async function efKpis(){ await loadDash(); }
 
   // ====== PERGUNTAS (CRUD) ======
   const qBody = $('q-table').querySelector('tbody');
@@ -467,7 +444,7 @@
       alternativa_b: $('f-b').value.trim(),
       alternativa_c: $('f-c').value.trim(),
       alternativa_d: $('f-d').value.trim(),
-      correta: $('f-correta').value, // a/b/c/d
+      correta: $('f-correta').value,
       ativa: $('f-ativa').value === 'true',
       categoria: $('f-cat').value.trim(),
       dificuldade: $('f-dif').value.trim()
@@ -479,7 +456,7 @@
       await AdminAPI.saveQuestion(item);
       closeQ();
       loadQuestions();
-      loadDash(); // atualiza KPI perguntas ativas
+      loadDash();
     }catch(err){
       alert('Erro ao salvar: ' + err.message);
     }
@@ -563,10 +540,7 @@
           </tr>
         `;
       }).join('');
-
-      // Atualiza KPIs/parceiros com a mesma resposta (economiza chamadas)
-      loadDash();
-
+      // opcional: não chamamos loadDash() aqui para evitar chamadas extras
     }catch(err){
       vBody.innerHTML = `<tr><td colspan="8" class="warn">Erro: ${esc(err.message)}</td></tr>`;
     }
@@ -577,6 +551,7 @@
     try{
       await AdminAPI.redeemVoucher(id);
       loadVouchers();
+      loadDash(); // reflete total de retiradas
     }catch(err){
       alert('Erro ao validar: '+err.message);
     }
