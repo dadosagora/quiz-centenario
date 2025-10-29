@@ -154,7 +154,7 @@
 
         <p class="note" id="batchStats" style="margin-top:8px;"></p>
 
-        <div class="btn-row">
+        <div class="btn-row" id="downloadRow">
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
           <button id="btnCopy" class="btn secondary" type="button">Copiar código</button>
         </div>
@@ -217,11 +217,11 @@
     window.addEventListener('pageshow', (e) => { if (e.persisted) location.replace('index.html'); });
   })();
 
- // === CONFIG ===
-const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
-const BATCH_SIZE = 10;
+  // === CONFIG ===
+  const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+  const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
+  const BATCH_SIZE = 10;
 
   // Instagram dos parceiros
   const PARTNERS = [
@@ -265,6 +265,7 @@ const BATCH_SIZE = 10;
     scoreBox:     document.getElementById('scoreBox'),
     partnersRow:  document.getElementById('partnersRow'),
     voucherPartnersNote: document.getElementById('voucherPartnersNote'),
+    downloadRow:  document.getElementById('downloadRow'),
   };
 
   let userId = null;
@@ -272,7 +273,7 @@ const BATCH_SIZE = 10;
   let askedIds = new Set();
 
   // contadores
-  let answeredTotal = 0;         // total de acertos no app (apenas de primeira)
+  let answeredTotal = 0;         // acertos de primeira no app
   let batch = [];                // perguntas do lote
   let idxInBatch = 0;            // índice da pergunta no lote
   let batchCorrect = 0;          // acertos de primeira do lote
@@ -299,7 +300,7 @@ const BATCH_SIZE = 10;
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  // Timeout defensivo para promessas (evita travar UI se rede demorar)
+  // Timeout defensivo
   async function withTimeout(promise, ms, label='op'){
     let timer;
     const timeout = new Promise((_, rej)=>{
@@ -311,7 +312,6 @@ const BATCH_SIZE = 10;
       return res;
     }catch(err){
       clearTimeout(timer);
-      // logar no Supabase
       try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent: navigator.userAgent, current_url: window.location.href }); }catch(_){}
       throw err;
     }
@@ -326,7 +326,7 @@ const BATCH_SIZE = 10;
         'insertSubmission'
       );
       if(error) throw error;
-    }catch(e){ console.error('Erro ao gravar submission:', e); /* já logado no withTimeout */ }
+    }catch(e){ console.error('Erro ao gravar submission:', e); }
   }
 
   async function ensureVoucher(user_id){
@@ -340,16 +340,15 @@ const BATCH_SIZE = 10;
         }),
         6000,
         'ensureVoucher.insert'
-      ).catch(e=>({ error:e })); // para não quebrar o loop
+      ).catch(e=>({ error:e }));
       if(!error) return { code, issuedAt, expiresAt };
       if(String((error.message||'') + '').toLowerCase().includes('duplicate')){
         code = formatVoucherCode();
         continue;
       }
-      console.warn('Falha ao criar voucher (tentativa continuará/fallback):', error);
+      console.warn('Falha ao criar voucher, usando fallback.');
       break;
     }
-    // fallback: retorna mesmo assim (UI mostra código local)
     return { code, issuedAt, expiresAt };
   }
 
@@ -528,54 +527,63 @@ const BATCH_SIZE = 10;
       els.batchStats.textContent = `Você acertou ${batchCorrect} de ${batch.length} neste lote (somente acertos de primeira).`;
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
+      // Decide se é o primeiro lote (voucher ainda não emitido)
+      const primeiroLote = !window.__voucherIssued;
+
+      // Renderiza parceiros
       renderPartners();
 
-      let voucher = null;
-      try {
-        voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher');
-      } catch (e) {
-        // Fallback: gerar um código local e não travar a UI
-        voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: addDays(new Date(),14) };
-        console.warn('ensureVoucher falhou/expirou, usando fallback local:', e?.message||e);
-      }
-
-      if(!window.__voucherIssued){
+      // Voucher só no primeiro lote
+      if (primeiroLote) {
+        let voucher;
+        try {
+          voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher');
+        } catch (e) {
+          voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: addDays(new Date(),14) };
+          console.warn('ensureVoucher falhou/expirou, usando fallback local:', e?.message||e);
+        }
         els.voucherCode.textContent = voucher.code;
         els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
         window.__voucherIssued = true;
         els.voucherBox.style.display = 'block';
+        els.partnersRow.style.display = 'flex';
+        els.downloadRow.style.display = 'flex';
         els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
         els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar a revista.';
       } else {
+        // Esconde no(s) lote(s) seguinte(s)
         els.voucherBox.style.display = 'none';
+        els.partnersRow.style.display = 'none';
+        els.downloadRow.style.display = 'none';
         els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
         els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
       }
 
+      // Contador geral: total de perguntas concluídas (não só acertos de primeira)
+      const totalRespondidas = askedIds.size;
       const totalAtivas = allQuestions.length;
-      els.answeredCount.textContent = `Você já respondeu ${answeredTotal} de ${totalAtivas} perguntas disponíveis (acertos de primeira).`;
+      els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
 
+      // Botão de download do PDF (só fica visível no primeiro lote; já controlado por downloadRow)
+      if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
+        els.btnDownload.href = PDF_URL;
+        els.btnDownload.removeAttribute('disabled');
+        els.btnDownload.setAttribute('aria-disabled', 'false');
+        els.btnDownload.setAttribute('rel', 'noopener');
+        els.btnDownload.setAttribute('download', 'livro_centenario.pdf');
+        els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
+      } else {
+        els.btnDownload.href = '#';
+        els.btnDownload.setAttribute('disabled', 'true');
+        els.btnDownload.setAttribute('aria-disabled', 'true');
+        els.btnDownload.textContent = 'Baixar o livro (em breve)';
+      }
+
+      // Mostra "Continuar respondendo" se ainda houver perguntas restantes
       const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
       els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
 
       els.progressBar.style.width = '100%';
-
-      els.btnDownload.href = (PDF_URL && /^https?:\/\//i.test(PDF_URL)) ? PDF_URL : '#';
-      // Botão de download do PDF
-if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
-  els.btnDownload.href = PDF_URL;
-  els.btnDownload.removeAttribute('disabled');     // caso tenha sido marcado antes
-  els.btnDownload.setAttribute('aria-disabled', 'false');
-  els.btnDownload.setAttribute('rel', 'noopener'); // segurança
-  els.btnDownload.setAttribute('download', 'livro_centenario.pdf'); // opcional: forçar salvar
-  els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
-} else {
-  els.btnDownload.href = '#';
-  els.btnDownload.setAttribute('disabled', 'true');
-  els.btnDownload.setAttribute('aria-disabled', 'true');
-  els.btnDownload.textContent = 'Baixar o livro (em breve)';
-}
-
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
       const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
@@ -583,7 +591,6 @@ if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
     }catch(e){
       console.error('Falha no showFinal:', e);
       reportErrorToSupabase(e);
-      // fallback final imediato (garante que a tela não trave)
       els.finalTitle.textContent = 'Concluído! 🎉';
       els.finalSubtitle.textContent = 'Seu código pode demorar um pouco, tente novamente em alguns instantes.';
       showView('final');
