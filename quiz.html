@@ -36,6 +36,9 @@
       transition:border-color .15s,transform .05s, background .2s;
       touch-action: manipulation; user-select:none; -webkit-tap-highlight-color: transparent;
       pointer-events:auto;
+      /* AUMENTO DA FONTE DAS RESPOSTAS */
+      font-size: clamp(16px, 2.8vw, 18px);
+      line-height: 1.35;
     }
     .opt:hover{border-color:var(--opt-hover);transform:translateY(-1px)}
     .opt.disabled{opacity:.6;pointer-events:none}
@@ -102,7 +105,7 @@
       .btn{padding:9px 12px}
     }
 
-    /* === Painel de Debug === */
+    /* Painel de Debug */
     .dbg {
       position: fixed; left: 8px; right: 8px; bottom: 8px;
       background: #111; color: #fff; font: 12px/1.3 system-ui, sans-serif;
@@ -142,17 +145,15 @@
 
       <!-- VISÃO FINAL -->
       <div id="finalView" class="final" style="display:none">
-        <!-- NOTA DESTACADA -->
         <div id="scoreBox" class="score" aria-live="polite">
           <h3>Seu desempenho neste lote</h3>
-          <div class="big" id="scoreText">0 / 10</div>
+          <div class="big" id="scoreText">0 / 20</div>
           <div class="note" id="scoreHint">Contamos apenas os acertos de primeira.</div>
         </div>
 
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
         <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
 
-        <!-- PARCEIROS (links Instagram) -->
         <div class="partners" id="partnersRow" aria-label="Parceiros para retirada"></div>
 
         <div id="voucherBox" class="voucher">
@@ -229,9 +230,10 @@
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
-  const BATCH_SIZE = 10;
 
-  // Parceiros com nomes atualizados
+  /* LOTE PASSA PARA 20 */
+  const BATCH_SIZE = 20;
+
   const PARTNERS = [
     { name: "Mina Café & Vinho - Praça do Congresso (Centro)", url: "https://www.instagram.com/minacafevinho/" },
     { name: "Café do Imigrante - Parque do Imigrante (Rio Maina)", url: "https://www.instagram.com/cafe_do_imigrante/" }
@@ -276,7 +278,7 @@
   let allQuestions = [];
   let askedIds = new Set();
 
-  let answeredTotal = 0; // acertos de primeira
+  let answeredTotal = 0;
   let batch = [];
   let idxInBatch = 0;
   let batchCorrect = 0;
@@ -300,8 +302,8 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  /* ===== Debug helpers ===== */
-  const DEBUG = true; // troque para false quando finalizar a investigação
+  /* Debug */
+  const DEBUG = true;
   const dbgEl = document.getElementById('__dbg');
   function dbgShow(msg){ if(!DEBUG) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
   async function dbgLog(where, extra={}){
@@ -328,7 +330,6 @@
     ].filter(Boolean).join(' • ');
     dbgShow(msg);
   }
-  /* ========================= */
 
   async function withTimeout(promise, ms, label='op'){
     let timer;
@@ -500,18 +501,26 @@
     return Array.from(s).sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
   }
 
+  /* Inclusão de "TODAS" nas opções do seletor */
   function populateSelector(){
-    const cats = computeUnique(allQuestions, 'categoria');
-    const difs = computeUnique(allQuestions, 'dificuldade');
-    els.selCategoria.innerHTML   = cats.map(c=>`<option value="${c}">${c}</option>`).join('');
-    els.selDificuldade.innerHTML = difs.map(d=>`<option value="${d}">${d}</option>`).join('');
+    const cats = computeUnique(allQuestions, 'categoria').filter(Boolean);
+    const difs = computeUnique(allQuestions, 'dificuldade').filter(Boolean);
+    els.selCategoria.innerHTML =
+      ['TODAS', ...cats].map(c=>`<option value="${c}">${c}</option>`).join('');
+    els.selDificuldade.innerHTML =
+      ['TODAS', ...difs].map(d=>`<option value="${d}">${d}</option>`).join('');
   }
 
   function startBatch({ categoria=null, dificuldade=null } = {}){
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
-    if(categoria)   pool = pool.filter(q => (q.categoria||'').trim() === categoria);
-    if(dificuldade) pool = pool.filter(q => (q.dificuldade||'').trim() === dificuldade);
+
+    if(categoria && categoria !== 'TODAS') {
+      pool = pool.filter(q => (q.categoria||'').trim() === categoria);
+    }
+    if(dificuldade && dificuldade !== 'TODAS') {
+      pool = pool.filter(q => (q.dificuldade||'').trim() === dificuldade);
+    }
 
     batch = pool.slice(0, BATCH_SIZE);
     idxInBatch = 0;
@@ -556,12 +565,10 @@
 
       showView('final');
 
-      // nota do lote no topo
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
       const primeiroLote = !window.__voucherIssued;
 
-      // parceiros e voucher apenas no primeiro lote
       if (primeiroLote) {
         renderPartners();
         els.partnersRow.style.display = 'flex';
@@ -586,12 +593,10 @@
         els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
       }
 
-      // contador geral: total de perguntas concluídas
       const totalRespondidas = askedIds.size;
       const totalAtivas = allQuestions.length;
       els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
 
-      // PDF
       if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
         els.btnDownload.href = PDF_URL;
         els.btnDownload.removeAttribute('disabled');
@@ -632,7 +637,6 @@
     els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
   }
 
-  // botões
   els.btnTryAgain.addEventListener('click',()=>{
     enableOptions(); clearOptStates();
     els.feedback.textContent=''; els.feedback.className='feedback';
