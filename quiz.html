@@ -102,7 +102,7 @@
       position: fixed; left: 8px; right: 8px; bottom: 8px;
       background: #111; color: #fff; font: 12px/1.3 system-ui, sans-serif;
       border-radius: 10px; padding: 8px 10px; opacity: .9; z-index: 9999;
-      pointer-events: none; /* evita bloquear cliques do conteúdo */
+      pointer-events: none; /* evita bloquear cliques */
     }
     .dbg b { color: #ffe082; }
     .dbg .bad { color: #ff8a80; }
@@ -138,14 +138,12 @@
 
       <!-- VISÃO FINAL -->
       <div id="finalView" class="final" style="display:none">
-        <!-- Nota do lote -->
         <div id="scoreBox" class="score" aria-live="polite">
           <h3>Seu desempenho neste lote</h3>
           <div class="big" id="scoreText">0 / 20</div>
           <div class="note" id="scoreHint">Contamos apenas os acertos de primeira.</div>
         </div>
 
-        <!-- Placar geral (aparece somente quando esgotar as perguntas) -->
         <div id="overallBox" class="overall" style="display:none" aria-live="polite">
           <h3>Placar geral</h3>
           <div class="big" id="overallText">0 / 0</div>
@@ -155,7 +153,6 @@
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
         <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
 
-        <!-- Parceiros (links Instagram) -->
         <div class="partners" id="partnersRow" aria-label="Parceiros para retirada"></div>
 
         <div id="voucherBox" class="voucher">
@@ -171,7 +168,6 @@
 
         <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
-        <!-- Ações finais -->
         <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
           <button class="btn" id="btnContinue" type="button">Continuar respondendo</button>
           <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">📲 Compartilhe com seus amigos</a>
@@ -208,7 +204,6 @@
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
 
-  /* LOTE = 20 perguntas */
   const BATCH_SIZE = 20;
 
   const PARTNERS = [
@@ -251,11 +246,9 @@
   let allQuestions = [];
   let askedIds = new Set();
 
-  /* Contadores globais */
-  let answeredTotal = 0;       // acertos de 1ª em TODOS os lotes
-  let totalConcluidas = 0;     // total de perguntas concluídas em TODOS os lotes
+  let answeredTotal = 0;
+  let totalConcluidas = 0;
 
-  /* Estado do lote atual */
   let batch = [];
   let idxInBatch = 0;
   let batchCorrect = 0;
@@ -277,10 +270,9 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  /* Debug */
   const DEBUG = true;
   const dbgEl = document.getElementById('__dbg');
-  if (dbgEl) { dbgEl.style.pointerEvents = 'none'; } // reforço em runtime
+  if (dbgEl) { dbgEl.style.pointerEvents = 'none'; }
   function dbgShow(msg){ if(!DEBUG) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
   async function dbgLog(where, extra={}){
     if(!DEBUG) return;
@@ -346,7 +338,6 @@
       if(!error) return { code, issuedAt, expiresAt };
       if(String((error.message||'') + '').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
       console.warn('Falha ao criar voucher, fallback local.');
-      break;
     }
     return { code, issuedAt, expiresAt };
   }
@@ -420,6 +411,67 @@
     }
   }
 
+  /* >>> LISTENER DE CLIQUE NAS OPÇÕES (restaurado) <<< */
+  els.options.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('.opt');
+    if (!btn || !els.options.contains(btn)) return;
+    if (locked) return;
+    if (handlingClick) return;
+    handlingClick = true; setTimeout(()=>handlingClick=false, 120);
+
+    dbgLog('opt.click.start', { key: btn.dataset?.key });
+
+    clearOptStates();
+    btn.classList.add('selected');
+    btn.setAttribute('aria-pressed', 'true');
+
+    currentAttempts++;
+    const key = (btn.dataset.key || '').toLowerCase();
+
+    try {
+      if (key === currentCorrectKey) {
+        locked = true;
+        btn.classList.remove('selected'); btn.classList.add('correct');
+        els.feedback.textContent = '✅ Resposta certa!'; els.feedback.className = 'feedback ok';
+        els.btnNext.disabled = false; els.btnTryAgain.disabled = true;
+
+        const q = batch[idxInBatch];
+
+        if (!askedIds.has(q.id)) {
+          totalConcluidas += 1;
+        }
+        askedIds.add(q.id);
+
+        if (currentAttempts === 1) {
+          batchCorrect++;
+          answeredTotal++;
+        }
+
+        await insertSubmission({
+          user_id: userId,
+          question_id: q.id,
+          first_try_correct: (currentAttempts === 1),
+        });
+
+        disableOptions();
+        dbgLog('opt.correct', { qid: q.id, attempts: currentAttempts });
+        dbgState('✔ correta');
+
+      } else {
+        btn.classList.remove('selected'); btn.classList.add('wrong');
+        setTimeout(() => btn.classList.remove('wrong'), 600);
+        els.feedback.textContent = '❌ Não é essa. Tente novamente.'; els.feedback.className = 'feedback err';
+        els.btnTryAgain.disabled = false;
+        dbgLog('opt.wrong', { qid: batch[idxInBatch]?.id, attempts: currentAttempts });
+        dbgState('✖ tentativa incorreta');
+      }
+    } catch (e) {
+      console.error('Falha ao processar resposta:', e);
+      reportErrorToSupabase(e);
+    }
+  });
+  /* ---------------------------------------- */
+
   function startBatch(){
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
@@ -459,7 +511,6 @@
     `).join('');
   }
 
-  /* ========= LOGGER DE DOWNLOADS ========= */
   async function logDownload({ user_id, code, url }) {
     try {
       const payload = {
@@ -495,7 +546,6 @@
       ev.preventDefault();
     }, { passive:false });
   })();
-  /* ======== FIM LOGGER DE DOWNLOADS ======== */
 
   async function showFinal(){
     try{
@@ -559,9 +609,6 @@
         els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
       } else {
         els.btnDownload.href = '#';
-        els.btnDownload.setAttribute('disabled', 'true');
-        els.btnDownload.setAttribute('aria-disabled', 'true');
-        els.btnDownload.textContent = 'Baixar o livro (em breve)';
       }
 
       els.progressBar.style.width = '100%';
@@ -587,7 +634,6 @@
     els.finalView.style.display = (name==='final') ? 'block' : 'none';
   }
 
-  // botões
   els.btnTryAgain.addEventListener('click',()=>{
     enableOptions(); clearOptStates();
     els.feedback.textContent=''; els.feedback.className='feedback';
@@ -610,7 +656,6 @@
     els.btnCopy.textContent='Copiar código';
   });
 
-  // “Continuar” inicia novo lote com próximas perguntas
   els.btnContinue?.addEventListener('click', ()=>{
     showView('quiz');
     startBatch();
