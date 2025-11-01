@@ -36,7 +36,6 @@
       transition:border-color .15s,transform .05s, background .2s;
       touch-action: manipulation; user-select:none; -webkit-tap-highlight-color: transparent;
       pointer-events:auto;
-      /* AUMENTO DA FONTE DAS RESPOSTAS */
       font-size: clamp(16px, 2.8vw, 18px);
       line-height: 1.35;
     }
@@ -65,14 +64,14 @@
     .code{font-size:clamp(20px,4vw,26px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:8px 12px;border-radius:12px;display:inline-block;margin:6px 0 0}
     .note{color:var(--muted);font-size:14px;margin-top:6px}
 
-    /* Destaque da Nota */
-    .score{
+    /* Destaques de Nota */
+    .score, .overall{
       max-width:640px;margin:8px auto 12px;padding:14px 16px;border-radius:16px;
       background:linear-gradient(180deg,#fff7da,#ffeaa3); border:1px solid #ead081;
       box-shadow:0 8px 28px rgba(201,162,39,.18)
     }
-    .score h3{margin:0 0 4px; font-size:clamp(18px,3.8vw,22px)}
-    .score .big{font-weight:900;font-size:clamp(22px,5vw,34px);letter-spacing:.3px}
+    .score h3, .overall h3{margin:0 0 4px; font-size:clamp(18px,3.8vw,22px)}
+    .score .big, .overall .big{font-weight:900;font-size:clamp(22px,5vw,34px);letter-spacing:.3px}
 
     /* Parceiros */
     .partners{max-width:640px;margin:6px auto 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
@@ -145,15 +144,24 @@
 
       <!-- VISÃO FINAL -->
       <div id="finalView" class="final" style="display:none">
+        <!-- Nota do lote -->
         <div id="scoreBox" class="score" aria-live="polite">
           <h3>Seu desempenho neste lote</h3>
           <div class="big" id="scoreText">0 / 20</div>
           <div class="note" id="scoreHint">Contamos apenas os acertos de primeira.</div>
         </div>
 
+        <!-- Placar geral (aparece somente quando esgotar as perguntas) -->
+        <div id="overallBox" class="overall" style="display:none" aria-live="polite">
+          <h3>Placar geral</h3>
+          <div class="big" id="overallText">0 / 0</div>
+          <div class="note">Soma de todos os lotes concluídos.</div>
+        </div>
+
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
         <p id="finalSubtitle">Apresente o seu código no parceiro para retirar a revista.</p>
 
+        <!-- Parceiros (links Instagram) -->
         <div class="partners" id="partnersRow" aria-label="Parceiros para retirada"></div>
 
         <div id="voucherBox" class="voucher">
@@ -169,6 +177,7 @@
 
         <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
+        <!-- Ações finais: sempre visíveis; o botão "Continuar" é ocultado quando não houver mais perguntas -->
         <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
           <button class="btn" id="btnContinue" type="button">Continuar respondendo</button>
           <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">📲 Compartilhe com seus amigos</a>
@@ -231,7 +240,7 @@
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
 
-  /* LOTE PASSA PARA 20 */
+  /* LOTE = 20 perguntas */
   const BATCH_SIZE = 20;
 
   const PARTNERS = [
@@ -272,18 +281,22 @@
     scoreText:    document.getElementById('scoreText'),
     partnersRow:  document.getElementById('partnersRow'),
     downloadRow:  document.getElementById('downloadRow'),
+    overallBox:   document.getElementById('overallBox'),
+    overallText:  document.getElementById('overallText'),
   };
 
   let userId = null;
   let allQuestions = [];
   let askedIds = new Set();
 
-  let answeredTotal = 0;
+  /* Contadores globais */
+  let answeredTotal = 0;       // acertos de 1ª em TODOS os lotes
+  let totalConcluidas = 0;     // total de perguntas concluídas em TODOS os lotes
+
+  /* Estado do lote atual */
   let batch = [];
   let idxInBatch = 0;
   let batchCorrect = 0;
-
-  let currentFilter = { categoria: null, dificuldade: null };
 
   let currentCorrectKey = '';
   let currentAttempts   = 0;
@@ -326,6 +339,7 @@
       `qid=${q.id ?? '—'}`,
       `correta=<b>${currentCorrectKey||'?'}</b>`,
       `tentativas=${currentAttempts}`,
+      `globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,
       extraMsg && `<span class="bad">${extraMsg}</span>`
     ].filter(Boolean).join(' • ');
     dbgShow(msg);
@@ -467,9 +481,17 @@
         els.btnNext.disabled = false; els.btnTryAgain.disabled = true;
 
         const q = batch[idxInBatch];
+
+        /* Contadores globais */
+        if (!askedIds.has(q.id)) {
+          totalConcluidas += 1;     // concluiu esta pergunta pela 1ª vez
+        }
         askedIds.add(q.id);
 
-        if (currentAttempts === 1) { batchCorrect++; answeredTotal++; }
+        if (currentAttempts === 1) {
+          batchCorrect++;
+          answeredTotal++;          // acerto de 1ª no global
+        }
 
         await insertSubmission({
           user_id: userId,
@@ -501,7 +523,7 @@
     return Array.from(s).sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
   }
 
-  /* Inclusão de "TODAS" nas opções do seletor */
+  /* “TODAS” no seletor */
   function populateSelector(){
     const cats = computeUnique(allQuestions, 'categoria').filter(Boolean);
     const difs = computeUnique(allQuestions, 'dificuldade').filter(Boolean);
@@ -565,6 +587,7 @@
 
       showView('final');
 
+      /* Score do lote atual */
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
       const primeiroLote = !window.__voucherIssued;
@@ -597,6 +620,24 @@
       const totalAtivas = allQuestions.length;
       els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
 
+      /* Ações finais sempre visíveis; “Continuar” só se ainda houver perguntas */
+      const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
+
+      // Mostrar/ocultar “Continuar respondendo”
+      els.continueRow.style.display = 'flex';
+      els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
+
+      // Se esgotou as perguntas, mostra placar geral e muda títulos
+      if (remaining === 0) {
+        els.finalTitle.textContent = 'Você concluiu todas as perguntas! 🎉';
+        els.finalSubtitle.textContent = 'Obrigado por participar. Compartilhe e visite o HN Notícias.';
+        els.overallText.textContent = `${answeredTotal} / ${totalConcluidas}`;
+        els.overallBox.style.display = 'block';
+      } else {
+        els.overallBox.style.display = 'none';
+      }
+
+      // PDF
       if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
         els.btnDownload.href = PDF_URL;
         els.btnDownload.removeAttribute('disabled');
@@ -611,15 +652,13 @@
         els.btnDownload.textContent = 'Baixar o livro (em breve)';
       }
 
-      const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
-      els.continueRow.style.display = (remaining > 0) ? 'flex' : 'none';
       els.progressBar.style.width = '100%';
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
       const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
       els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
 
-      dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued });
+      dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued, remaining });
 
     }catch(e){
       console.error('Falha no showFinal:', e);
@@ -637,6 +676,7 @@
     els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
   }
 
+  // botões
   els.btnTryAgain.addEventListener('click',()=>{
     enableOptions(); clearOptStates();
     els.feedback.textContent=''; els.feedback.className='feedback';
