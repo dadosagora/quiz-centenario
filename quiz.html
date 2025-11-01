@@ -528,24 +528,48 @@
     }
   }
 
-  (function wireDownloadLogging(){
-    const a = document.getElementById('btnDownload');
-    if (!a) return;
-    a.addEventListener('click', async (ev) => {
-      const href = a.getAttribute('href') || '';
-      if (!/^https?:\/\//i.test(href)) return;
+ <script>
+(function wireDownloadLogging(){
+  const a = document.getElementById('btnDownload') || document.getElementById('btndownload');
+  if (!a) { console.warn('[downloads] botão não encontrado'); return; }
 
-      const code = (document.getElementById('voucherCode')?.textContent || '').trim() || null;
+  a.addEventListener('click', async (ev) => {
+    const href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href)) {
+      console.warn('[downloads] href inválido:', href);
+      return;
+    }
 
-      const w = window.open(href, '_blank', 'noopener');
+    const code = (document.getElementById('voucherCode')?.textContent || '').trim() || null;
+    const payload = {
+      user_id: localStorage.getItem('hn_user_id') || null,
+      voucher_code: code,
+      file_url: href,
+      user_agent: navigator.userAgent || null,
+      referrer: document.referrer || null,
+      downloaded_at: new Date().toISOString()
+    };
+    console.log('[downloads] tentando inserir:', payload);
 
-      try { await logDownload({ user_id: userId, code, url: href }); } catch(_) {}
+    // abre o PDF primeiro (UX) e registra depois
+    const w = window.open(href, '_blank', 'noopener');
 
-      if (!w || w.closed) window.location.href = href;
+    try {
+      const { data, error } = await client.from('downloads').insert(payload).select('*');
+      if (error) {
+        console.error('[downloads] INSERT falhou:', error);
+      } else {
+        console.log('[downloads] INSERT OK:', data);
+      }
+    } catch (e) {
+      console.error('[downloads] exceção no insert:', e);
+    }
 
-      ev.preventDefault();
-    }, { passive:false });
-  })();
+    if (!w || w.closed) window.location.href = href;
+    ev.preventDefault();
+  }, { passive:false });
+})();
+</script>
 
   async function showFinal(){
     try{
