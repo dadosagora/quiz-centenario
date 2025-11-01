@@ -17,20 +17,17 @@
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .wrap{min-height:100dvh;display:flex;flex-direction:column}
 
-    /* HEADER — menos espaço vertical */
     header{border-bottom:1px solid var(--border);background:#fff}
-    .head{width:min(980px,94vw);margin:0 auto;padding:8px 0 4px}   /* era 14px 0  -> reduzido */
+    .head{width:min(980px,94vw);margin:0 auto;padding:8px 0 4px}
     .logo-wrap{display:flex;justify-content:center}
     .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
-    .title{font-weight:900;font-size:clamp(18px,3.6vw,22px);text-align:center;margin:6px 0 0} /* menos margem */
 
-    /* CONTEÚDO */
-    main{width:min(980px,94vw);margin:12px auto 18px;flex:1}       /* era 22px -> 12px */
+    main{width:min(980px,94vw);margin:12px auto 18px;flex:1}
     .hero{
       background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;
       box-shadow:var(--shadow)
     }
-    .cover{padding:14px 16px;border-bottom:1px solid var(--border)} /* era 18px -> 14px */
+    .cover{padding:14px 16px;border-bottom:1px solid var(--border)}
     .cover h1{margin:0 0 6px;font-size:clamp(22px,4.2vw,36px);font-weight:900}
     .cover p{margin:0;color:var(--muted)}
     .content{padding:14px 16px;line-height:1.55}
@@ -38,7 +35,6 @@
     .strong{font-weight:800}
     ul{margin:8px 0 0 18px;color:#444}
 
-    /* CTA — mais chamativo */
     .cta{padding:14px;border-top:1px solid var(--border);display:flex;justify-content:center}
     .btn-cta{
       appearance:none; border:0; cursor:pointer;
@@ -51,7 +47,6 @@
     }
     .btn-cta:hover{ filter:brightness(1.05); box-shadow: 0 8px 22px rgba(201,162,39,.45), inset 0 1px 0 rgba(255,255,255,.7);}
     .btn-cta:active{ transform:translateY(1px) }
-    /* brilho pulsante sutil */
     .btn-cta::after{
       content:""; position:absolute; inset:-2px; border-radius:16px;
       background: radial-gradient(120px 40px at 50% 0%, rgba(255,255,255,.45), transparent 60%);
@@ -66,10 +61,8 @@
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:10px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
 
-    /* ainda mais compacto em telas bem baixas */
     @media (max-height:740px){
       .head{padding:6px 0 2px}
-      .title{margin-top:4px}
       .cover{padding:12px 14px}
       .content{padding:12px 14px}
       .btn-cta{padding:14px 18px;font-size:17px}
@@ -81,7 +74,7 @@
   <header>
     <div class="head">
       <div class="logo-wrap"><img src="assets/hn-logo.png" alt="HN Notícias"></div>
-      </div>
+    </div>
   </header>
 
   <main>
@@ -91,15 +84,18 @@
         <p>Um século de história, conquistas e memórias.</p>
       </div>
       <div class="content">
-        <p>Para celebrar o centenário de emancipação política de Criciúma, criamos o <span class="strong">Quiz do Centenário</span> — uma forma divertida de testar seus conhecimentos sobre a cidade e ganhar um presente especial.</p>
+        <p>Para celebrar o centenário de <span class="strong">emancipação político-administrativa</span> de Criciúma, criamos o <span class="strong">Quiz do Centenário</span>, uma forma divertida de testar seus conhecimentos sobre a cidade e ganhar um presente especial.</p>
         <p class="strong">Como funciona?</p>
-        <p>Responda às perguntas (com feedback imediato). Ao concluir, liberamos o <span class="strong">download do livro</span> e geramos um <span class="strong">código</span> para retirar a revista física no parceiro.</p>
+        <p>Responda às perguntas (com feedback imediato). Ao concluir, liberamos o <span class="strong">download do livro</span> e geramos um <span class="strong">código</span> para retirada da revista física no ponto de retirada.</p>
         <ul>
           <li>📕 O download é gratuito.</li>
-          <li>🏛️ 1 revista por pessoa (enquanto durar o estoque).</li>
+          <li>🏛️ 01 revista por pessoa.</li>
           <li>⏳ Código válido por 14 dias.</li>
-          <li>📍 Parceiros: Mina Café e Vinho – Praça do Congresso </p>
-                            Café Imigrante - Parque do Imigrante </li>
+          <li>
+            📍 Ponto de retirada:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;Mina Café e Vinho — Praça do Congresso<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;Café do Imigrante — Parque do Imigrante
+          </li>
         </ul>
       </div>
       <div class="cta">
