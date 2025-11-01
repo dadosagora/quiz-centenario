@@ -82,13 +82,6 @@
     }
     .partners a:hover{filter:brightness(1.03);transform:translateY(-1px)}
 
-    .selector{display:none}
-    .selector .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .selector label{font-weight:700;font-size:14px;margin:2px 0 6px;display:block}
-    .selector select{width:100%;padding:10px;border:1px solid #dcdcdc;border-radius:10px;background:#fff}
-    .selector .hint{color:var(--muted);font-size:13px;margin:6px 0 0}
-    .selector .warn{color:#b00020;background:#fdecee;border:1px solid #f6c9cf;border-radius:10px;padding:8px;margin-top:10px;display:none}
-
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
@@ -177,7 +170,7 @@
 
         <p class="note" id="answeredCount" style="margin-top:10px;"></p>
 
-        <!-- Ações finais: sempre visíveis; o botão "Continuar" é ocultado quando não houver mais perguntas -->
+        <!-- Ações finais -->
         <div class="btn-row" id="continueRow" style="margin-top:12px;display:none">
           <button class="btn" id="btnContinue" type="button">Continuar respondendo</button>
           <a id="btnShare" href="#" target="_blank" rel="noopener" class="btn" style="background:#25d366; border:none; color:#fff;">📲 Compartilhe com seus amigos</a>
@@ -185,32 +178,6 @@
           <a class="btn secondary" href="https://hnnoticias.com.br" target="_blank" rel="noopener">Ir para o site HN Notícias</a>
         </div>
       </div>
-
-      <!-- VISÃO SELETOR -->
-      <div id="selectorView" class="selector">
-        <h2 style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Escolha como quer continuar</h2>
-        <p class="note">Selecione uma <strong>categoria</strong> e uma <strong>dificuldade</strong> para carregar mais 10 perguntas.</p>
-
-        <div class="row" style="margin-top:8px;">
-          <div>
-            <label for="selCategoria">Categoria</label>
-            <select id="selCategoria"></select>
-          </div>
-          <div>
-            <label for="selDificuldade">Dificuldade</label>
-            <select id="selDificuldade"></select>
-          </div>
-        </div>
-
-        <p class="hint">As opções acima são geradas com base nas perguntas ativas do banco.</p>
-        <div id="selectorWarn" class="warn">Não encontramos perguntas com esse filtro. Tente outra combinação.</div>
-
-        <div class="btn-row" style="margin-top:10px;">
-          <button id="btnStartFiltered" class="btn" type="button">Começar esse lote</button>
-          <button id="btnCancelSelector" class="btn secondary" type="button">Cancelar</button>
-        </div>
-      </div>
-      <!-- /VISÃO SELETOR -->
     </div>
   </main>
 
@@ -261,7 +228,6 @@
     btnNext:      document.getElementById('btnNext'),
     quizView:     document.getElementById('quizView'),
     finalView:    document.getElementById('finalView'),
-    selectorView: document.getElementById('selectorView'),
     voucherBox:   document.getElementById('voucherBox'),
     voucherCode:  document.getElementById('voucherCode'),
     voucherValidity: document.getElementById('voucherValidity'),
@@ -272,11 +238,6 @@
     finalTitle:   document.getElementById('finalTitle'),
     finalSubtitle:document.getElementById('finalSubtitle'),
     answeredCount:document.getElementById('answeredCount'),
-    selCategoria: document.getElementById('selCategoria'),
-    selDificuldade: document.getElementById('selDificuldade'),
-    selectorWarn: document.getElementById('selectorWarn'),
-    btnStartFiltered: document.getElementById('btnStartFiltered'),
-    btnCancelSelector: document.getElementById('btnCancelSelector'),
     btnShare:     document.getElementById('btnShare'),
     scoreText:    document.getElementById('scoreText'),
     partnersRow:  document.getElementById('partnersRow'),
@@ -457,100 +418,17 @@
     }
   }
 
-  els.options.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('.opt');
-    if (!btn || !els.options.contains(btn)) return;
-    if (locked) return;
-    if (handlingClick) return;
-    handlingClick = true; setTimeout(()=>handlingClick=false, 120);
-
-    dbgLog('opt.click.start', { key: btn.dataset?.key });
-
-    clearOptStates();
-    btn.classList.add('selected');
-    btn.setAttribute('aria-pressed', 'true');
-
-    currentAttempts++;
-    const key = (btn.dataset.key || '').toLowerCase();
-
-    try {
-      if (key === currentCorrectKey) {
-        locked = true;
-        btn.classList.remove('selected'); btn.classList.add('correct');
-        els.feedback.textContent = '✅ Resposta certa!'; els.feedback.className = 'feedback ok';
-        els.btnNext.disabled = false; els.btnTryAgain.disabled = true;
-
-        const q = batch[idxInBatch];
-
-        /* Contadores globais */
-        if (!askedIds.has(q.id)) {
-          totalConcluidas += 1;     // concluiu esta pergunta pela 1ª vez
-        }
-        askedIds.add(q.id);
-
-        if (currentAttempts === 1) {
-          batchCorrect++;
-          answeredTotal++;          // acerto de 1ª no global
-        }
-
-        await insertSubmission({
-          user_id: userId,
-          question_id: q.id,
-          first_try_correct: (currentAttempts === 1),
-        });
-
-        disableOptions();
-        dbgLog('opt.correct', { qid: q.id, attempts: currentAttempts });
-        dbgState('✔ correta');
-
-      } else {
-        btn.classList.remove('selected'); btn.classList.add('wrong');
-        setTimeout(() => btn.classList.remove('wrong'), 600);
-        els.feedback.textContent = '❌ Não é essa. Tente novamente.'; els.feedback.className = 'feedback err';
-        els.btnTryAgain.disabled = false;
-        dbgLog('opt.wrong', { qid: batch[idxInBatch]?.id, attempts: currentAttempts });
-        dbgState('✖ tentativa incorreta');
-      }
-    } catch (e) {
-      console.error('Falha ao processar resposta:', e);
-      reportErrorToSupabase(e);
-    }
-  });
-
-  function computeUnique(list, key){
-    const s = new Set();
-    for(const q of list){ const v = (q[key]||'').toString().trim(); if(v) s.add(v); }
-    return Array.from(s).sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
-  }
-
-  /* “TODAS” no seletor */
-  function populateSelector(){
-    const cats = computeUnique(allQuestions, 'categoria').filter(Boolean);
-    const difs = computeUnique(allQuestions, 'dificuldade').filter(Boolean);
-    els.selCategoria.innerHTML =
-      ['TODAS', ...cats].map(c=>`<option value="${c}">${c}</option>`).join('');
-    els.selDificuldade.innerHTML =
-      ['TODAS', ...difs].map(d=>`<option value="${d}">${d}</option>`).join('');
-  }
-
-  function startBatch({ categoria=null, dificuldade=null } = {}){
+  function startBatch(){
     const remaining = allQuestions.filter(q => !askedIds.has(q.id));
     let pool = remaining;
-
-    if(categoria && categoria !== 'TODAS') {
-      pool = pool.filter(q => (q.categoria||'').trim() === categoria);
-    }
-    if(dificuldade && dificuldade !== 'TODAS') {
-      pool = pool.filter(q => (q.dificuldade||'').trim() === dificuldade);
-    }
 
     batch = pool.slice(0, BATCH_SIZE);
     idxInBatch = 0;
     batchCorrect = 0;
 
     if(batch.length === 0){
-      els.selectorWarn.style.display = 'block';
-      showView('selector');
+      // Sem perguntas restantes: vai direto para a final (o showFinal cuidará do "placar geral")
+      showFinal();
       return;
     }
     showView('quiz');
@@ -561,7 +439,7 @@
     try{
       const { data, error } = await withTimeout(
         client.from('questions')
-          .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa,categoria,dificuldade')
+          .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
           .eq('ativa', true),
         7000,'loadAllQuestions'
       );
@@ -598,25 +476,22 @@
     }
   }
 
-  // Listener para o botão de download: abre o PDF e registra o download
   (function wireDownloadLogging(){
     const a = document.getElementById('btnDownload');
     if (!a) return;
     a.addEventListener('click', async (ev) => {
       const href = a.getAttribute('href') || '';
-      if (!/^https?:\/\//i.test(href)) return; // sem PDF válido, ignora
+      if (!/^https?:\/\//i.test(href)) return;
 
       const code = (document.getElementById('voucherCode')?.textContent || '').trim() || null;
 
-      // Abre primeiro, registra depois (UX suave)
       const w = window.open(href, '_blank', 'noopener');
 
       try { await logDownload({ user_id: userId, code, url: href }); } catch(_) {}
 
-      // Fallback se popup bloquear
       if (!w || w.closed) window.location.href = href;
 
-      ev.preventDefault(); // evita abrir duas vezes
+      ev.preventDefault();
     }, { passive:false });
   })();
   /* ======== FIM LOGGER DE DOWNLOADS ======== */
@@ -661,14 +536,12 @@
       const totalAtivas = allQuestions.length;
       els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
 
-      /* Ações finais sempre visíveis; “Continuar” só se ainda houver perguntas */
       const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
 
-      // Mostrar/ocultar “Continuar respondendo”
+      // Ações finais sempre visíveis; “Continuar” só aparece se houver perguntas restantes
       els.continueRow.style.display = 'flex';
       els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
 
-      // Se esgotou as perguntas, mostra placar geral e muda títulos
       if (remaining === 0) {
         els.finalTitle.textContent = 'Você concluiu todas as perguntas! 🎉';
         els.finalSubtitle.textContent = 'Obrigado por participar. Compartilhe e visite o HN Notícias.';
@@ -712,9 +585,8 @@
   }
 
   function showView(name){
-    els.quizView.style.display     = (name==='quiz') ? 'block' : 'none';
-    els.finalView.style.display    = (name==='final') ? 'block' : 'none';
-    els.selectorView.style.display = (name==='selector') ? 'block' : 'none';
+    els.quizView.style.display  = (name==='quiz') ? 'block' : 'none';
+    els.finalView.style.display = (name==='final') ? 'block' : 'none';
   }
 
   // botões
@@ -740,18 +612,11 @@
     els.btnCopy.textContent='Copiar código';
   });
 
-  els.btnContinue.addEventListener('click', ()=>{
-    populateSelector(); els.selectorWarn.style.display = 'none'; showView('selector');
+  // Agora o “Continuar” apenas inicia novo lote com as próximas perguntas
+  els.btnContinue?.addEventListener('click', ()=>{
+    showView('quiz');
+    startBatch();
   });
-
-  els.btnStartFiltered.addEventListener('click', ()=>{
-    const categoria   = els.selCategoria.value;
-    const dificuldade = els.selDificuldade.value;
-    els.selectorWarn.style.display = 'none';
-    startBatch({ categoria, dificuldade });
-  });
-
-  els.btnCancelSelector.addEventListener('click', ()=>{ showView('final'); });
 
   async function reportErrorToSupabase(err) {
     try {
@@ -778,6 +643,7 @@
     console.error("Promise Rejection:", payload);
     reportErrorToSupabase(payload);
   });
+
   (async function init(){
     try{
       userId = localStorage.getItem('hn_user_id');
