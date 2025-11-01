@@ -580,6 +580,47 @@
     `).join('');
   }
 
+  /* ========= LOGGER DE DOWNLOADS ========= */
+  async function logDownload({ user_id, code, url }) {
+    try {
+      const payload = {
+        user_id,
+        voucher_code: code || null,
+        file_url: url || null,
+        user_agent: navigator.userAgent || null,
+        referrer: document.referrer || null,
+        downloaded_at: new Date().toISOString()
+      };
+      const { error } = await client.from('downloads').insert(payload);
+      if (error) console.warn('downloads.insert falhou:', error.message);
+    } catch (e) {
+      console.warn('downloads.insert exception:', e);
+    }
+  }
+
+  // Listener para o botão de download: abre o PDF e registra o download
+  (function wireDownloadLogging(){
+    const a = document.getElementById('btnDownload');
+    if (!a) return;
+    a.addEventListener('click', async (ev) => {
+      const href = a.getAttribute('href') || '';
+      if (!/^https?:\/\//i.test(href)) return; // sem PDF válido, ignora
+
+      const code = (document.getElementById('voucherCode')?.textContent || '').trim() || null;
+
+      // Abre primeiro, registra depois (UX suave)
+      const w = window.open(href, '_blank', 'noopener');
+
+      try { await logDownload({ user_id: userId, code, url: href }); } catch(_) {}
+
+      // Fallback se popup bloquear
+      if (!w || w.closed) window.location.href = href;
+
+      ev.preventDefault(); // evita abrir duas vezes
+    }, { passive:false });
+  })();
+  /* ======== FIM LOGGER DE DOWNLOADS ======== */
+
   async function showFinal(){
     try{
       dbgLog('showFinal.start', { answeredTotal, batchCorrect, batchLen: batch.length });
