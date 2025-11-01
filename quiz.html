@@ -737,7 +737,60 @@
     console.error("Promise Rejection:", payload);
     reportErrorToSupabase(payload);
   });
+// 👉 Função para registrar o download
+async function logDownload({ user_id, code, url }) {
+  try {
+    const payload = {
+      user_id,
+      voucher_code: code || null,
+      file_url: url || null,
+      user_agent: navigator.userAgent || null,
+      referrer: document.referrer || null,
+      downloaded_at: new Date().toISOString()
+    };
+    // gravar (tolerante a RLS/timeout)
+    const { error } = await client
+      .from('downloads')
+      .insert(payload);
 
+    if (error) {
+      console.warn('downloads.insert falhou:', error.message);
+    }
+  } catch (e) {
+    console.warn('downloads.insert exception:', e);
+  }
+}
+
+// 🔗 intercepta clique do botão de download para registrar
+(function wireDownloadLogging(){
+  const a = document.getElementById('btnDownload');
+  if (!a) return;
+
+  a.addEventListener('click', async (ev) => {
+    // se não tiver PDF válido, não faz nada
+    const href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href)) return;
+
+    // captura dados disponíveis
+    const code = (document.getElementById('voucherCode')?.textContent || '').trim() || null;
+
+    // tenta registrar sem bloquear a navegação
+    // 1) abre a aba imediatamente (UX mais suave)
+    const w = window.open(href, '_blank', 'noopener');
+
+    // 2) registra em background (se falhar, só loga no console)
+    try { await logDownload({ user_id, code, url: href }); } catch(_) {}
+
+    // se o navegador bloqueou popup (raro aqui pq é clique direto), faz fallback:
+    if (!w || w.closed) {
+      window.location.href = href;
+    }
+
+    // evita comportamento duplo se for <a> dentro de outro listener
+    ev.preventDefault();
+  }, { passive:false });
+})();
+</script>
   (async function init(){
     try{
       userId = localStorage.getItem('hn_user_id');
