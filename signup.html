@@ -4,6 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cadastro – Quiz do Centenário</title>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-D7KWCCTL28"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-D7KWCCTL28');
+  </script>
+  <!-- fim Google tag -->
+
   <style>
     :root{
       --bg:#fff; --text:#111; --muted:#555;
@@ -206,7 +217,6 @@
       if(!res.ok){
         const t = await res.text();
         const low = t.toLowerCase();
-        // Tratamento extra: caso o índice UNIQUE já esteja ativo e ocorreu corrida
         if(res.status === 409 || low.includes('duplicate') || low.includes('unique')){
           showMsg("⚠️ Este número de WhatsApp já está cadastrado. Cada número pode participar apenas uma vez.", "err");
           btn.disabled = false;
@@ -215,7 +225,6 @@
         throw new Error("Falha ao salvar ("+res.status+"): "+t);
       }
 
-      // 3) OK → guarda id no localStorage e segue para o quiz
       localStorage.setItem('hn_user_id', id);
       showMsg("Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.", "ok");
       setTimeout(()=> window.location.href="quiz.html", 600);
