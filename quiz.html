@@ -213,6 +213,9 @@
     window.addEventListener('pageshow', (e) => { if (e.persisted) location.replace('index.html'); });
   })();
 
+  // ======= HARDENING (opt-in via ?harden=1) =======
+  const HARDENING = new URLSearchParams(location.search).has('harden');
+
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
@@ -283,7 +286,7 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  /* ===== Debug: painel OFF, logs ON ===== */
+  /* ===== Debug: painel OFF, logs ON (mantido como estava) ===== */
   const DEBUG_PANEL = false;
   const DEBUG_LOGS  = true;
   const dbgEl = document.getElementById('__dbg');
@@ -329,31 +332,60 @@
     }
   }
 
+  // ===== Helper de retry (usado só quando HARDENING = true) =====
+  async function withRetry(fn, { tries=5, base=200 } = {}){
+    let lastErr;
+    for (let i=0;i<tries;i++){
+      try { return await fn(); }
+      catch(e){
+        lastErr = e;
+        const status = e?.status || 0;
+        const msg = (e?.message||'').toLowerCase();
+        const retryable = status===0 || status===429 || (status>=500 && status<600) || msg.includes('timeout');
+        if (!retryable || i===tries-1) break;
+        await new Promise(r => setTimeout(r, base * Math.pow(2, i)));
+      }
+    }
+    throw lastErr;
+  }
+
   async function insertSubmission({ user_id, question_id, first_try_correct }){
     try{
-      const { error } = await withTimeout(
-        client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
-        5000,'insertSubmission'
-      );
-      if(error) throw error;
+      const task = async () => {
+        const { error, status } = await withTimeout(
+          client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
+          5000,'insertSubmission'
+        );
+        if(error){ error.status = status || 0; throw error; }
+      };
+      if (HARDENING) await withRetry(task, { tries:5, base:200 }); else await task();
     }catch(e){ console.error('Erro ao gravar submission:', e); }
   }
 
   async function ensureVoucher(user_id){
     let code = formatVoucherCode(), issuedAt = new Date(), expiresAt = addDays(issuedAt,14);
     for(let i=0;i<5;i++){
-      const { error } = await withTimeout(
-        client.from('vouchers').insert({
-          user_id, code, status:'pendente',
-          issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
-          partner:'Parceiros do projeto'
-        }),
-        6000,'ensureVoucher.insert'
-      ).catch(e=>({ error:e }));
-      if(!error) return { code, issuedAt, expiresAt };
-      if(String((error.message||'') + '').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
-      console.warn('Falha ao criar voucher, fallback local.');
+      try{
+        const task = async () => {
+          const { error, status } = await withTimeout(
+            client.from('vouchers').insert({
+              user_id, code, status:'pendente',
+              issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
+              partner:'Parceiros do projeto'
+            }),
+            6000,'ensureVoucher.insert'
+          );
+          if(error){ error.status = status || 0; throw error; }
+        };
+        if (HARDENING) await withRetry(task, { tries:4, base:250 }); else await task();
+        return { code, issuedAt, expiresAt };
+      }catch(e){
+        const msg = (e?.message||'').toLowerCase();
+        if (msg.includes('duplicate')) { code = formatVoucherCode(); continue; }
+        console.warn('Falha ao criar voucher, tentativa falhou:', e?.message || e);
+      }
     }
+    // fallback local
     return { code, issuedAt, expiresAt };
   }
 
@@ -539,11 +571,13 @@
 
   async function logDownload({ user_id, url }) {
     try {
-      const payload = { user_id, file: url };
-      const { error } = await client.from('downloads').insert(payload);
-      if (error) console.warn('downloads.insert falhou:', error.message);
+      const task = async () => {
+        const { error, status } = await client.from('downloads').insert({ user_id, file: url });
+        if (error){ error.status = status || 0; throw error; }
+      };
+      if (HARDENING) await withRetry(task, { tries:4, base:200 }); else await task();
     } catch (e) {
-      console.warn('downloads.insert exception:', e);
+      console.warn('downloads.insert falhou:', e?.message || e);
     }
   }
   (function wireDownloadLogging(){
