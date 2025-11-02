@@ -4,6 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quiz do Centenário de Criciúma — HN Notícias</title>
+
+  <!-- Google tag (gtag.js) — GA4 -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-D7KWCCTL28"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-D7KWCCTL28');
+  </script>
+  <!-- fim Google tag -->
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
@@ -104,7 +115,7 @@
       background: #111; color: #fff; font: 12px/1.3 system-ui, sans-serif;
       border-radius: 10px; padding: 8px 10px; opacity: .9; z-index: 9999;
       pointer-events: none;
-      display: none !important; /* mantém SEMPRE oculto */
+      display: none !important;
     }
     .dbg b { color: #ffe082; }
     .dbg .bad { color: #ff8a80; }
@@ -140,13 +151,13 @@
 
       <!-- VISÃO FINAL -->
       <div id="finalView" class="final" style="display:none">
-        <div id="scoreBox" class="score" aria-live="polite">
+        <div class="score" id="scoreBox" aria-live="polite">
           <h3>Seu desempenho neste lote</h3>
           <div class="big" id="scoreText">0 / 20</div>
           <div class="note" id="scoreHint">Contamos apenas os acertos de primeira.</div>
         </div>
 
-        <div id="overallBox" class="overall" style="display:none" aria-live="polite">
+        <div class="overall" id="overallBox" style="display:none" aria-live="polite">
           <h3>Placar geral</h3>
           <div class="big" id="overallText">0 / 0</div>
           <div class="note">Soma de todos os lotes concluídos.</div>
@@ -273,9 +284,9 @@
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
   /* ===== Debug: painel OFF, logs ON ===== */
-  const DEBUG_PANEL = false;   // não mostra overlay
-  const DEBUG_LOGS  = true;    // continua registrando no Supabase
-  const dbgEl = document.getElementById('__dbg'); // permanece no DOM
+  const DEBUG_PANEL = false;
+  const DEBUG_LOGS  = true;
+  const dbgEl = document.getElementById('__dbg');
   if (dbgEl) dbgEl.style.display = 'none';
   function dbgShow(msg){ if(!DEBUG_PANEL || !dbgEl) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
   async function dbgLog(where, extra={}){
@@ -433,7 +444,6 @@
     }
   }
 
-  // Listener robusto (click + pointerup)
   function handleOptionActivate(ev){
     const btn = ev.target.closest('.opt');
     if (!btn || !els.options.contains(btn)) return;
@@ -527,7 +537,6 @@
     `).join('');
   }
 
-  /* ========= LOGGER DE DOWNLOADS ========= */
   async function logDownload({ user_id, url }) {
     try {
       const payload = { user_id, file: url };
