@@ -150,12 +150,13 @@
         <button class="btn secondary" id="p-export">Exportar CSV</button>
       </div>
       <table id="p-table">
-        <thead><tr>
-          <th>Nome</th><th>Cidade</th><th>WhatsApp</th><th>Data</th>
-          <th>Download</th><th>Nota (geral)</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
+       <table id="p-table">
+  <thead><tr>
+    <th>Nome</th><th>Cidade</th><th>WhatsApp</th><th>Data</th>
+    <th>Download</th><th>Nota (1ª / total)</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
       <div class="muted" id="p-empty" style="display:none">Sem registros.</div>
     </div>
   </section>
@@ -508,49 +509,76 @@
   $('p-export').onclick = exportParticipants;
   $('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
-  async function loadParticipants(){
-    pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
+ async function loadParticipants(){
+  pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
+  try{
+    const search = $('p-search').value.trim() || undefined;
+    const { items } = await AdminAPI.listParticipants(search || "");
+    if(!items.length){ 
+      pBody.innerHTML=''; 
+      pEmpty.style.display='block'; 
+      pBody.dataset.rows = "[]";
+      return; 
+    }
+    pEmpty.style.display='none';
+
+    // ==== buscar stats em lote ====
+    const userIds = items.map(u=>u.id);
+    let statsMap = new Map();
     try{
-      const search = $('p-search').value.trim() || undefined;
-      const { items } = await AdminAPI.listParticipants(search || "");
+      const statsRes = await AdminAPI.bulkStatsParticipants(userIds);
+      // montar mapa user_id -> stats
+      statsMap = new Map((statsRes.items||[]).map(s => [s.user_id, s]));
+    }catch(e){
+      console.warn('Falha ao obter stats_bulk:', e);
+    }
 
-      // puxa estatísticas em lote (fallback seguro)
-      let statsById = {};
-      try {
-        const ids = items.map(u=>u.id);
-        const res = await AdminAPI.participantsStats(ids);
-        statsById = res?.byId || {};
-      } catch(_) { statsById = {}; }
-
-      if(!items.length){ pBody.innerHTML=''; pEmpty.style.display='block'; return; }
-      pEmpty.style.display='none';
-      pBody.innerHTML = items.map(u => {
-        const st = statsById[u.id] || {};
-        const downloaded = st.downloaded === true ? '✅ Sim' : (st.downloaded === false ? 'Não' : '—');
-        const sc = st.score && typeof st.score.correct === 'number' && typeof st.score.total === 'number'
-          ? `${st.score.correct} / ${st.score.total}` : '—';
-        return `
+    // render
+    pBody.innerHTML = items.map(u => {
+      const st = statsMap.get(u.id) || {};
+      const hasDownload = !!st.has_download;
+      const badge = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
+      const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
+      const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
+      const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
+      return `
         <tr>
           <td>${esc(u.nome)}</td>
           <td>${esc(u.cidade)}</td>
           <td>${esc(u.whatsapp)}</td>
           <td>${formatDate(u.created_at)}</td>
-          <td>${downloaded}</td>
-          <td>${sc}</td>
-        </tr>`;
-      }).join('');
-      pBody.dataset.rows = JSON.stringify(items);
-    }catch(err){
-      pBody.innerHTML = `<tr><td colspan="6" class="warn">Erro: ${esc(err.message)}</td></tr>`;
-    }
+          <td>${badge}</td>
+          <td>${nota}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // guardar dados para exportação (inclui stats)
+    const rowsForExport = items.map(u => {
+      const st = statsMap.get(u.id) || {};
+      return {
+        nome: u.nome,
+        cidade: u.cidade,
+        whatsapp: u.whatsapp,
+        created_at: u.created_at,
+        download: st.has_download ? 'Sim' : 'Não',
+        acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
+        total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
+      };
+    });
+    pBody.dataset.rows = JSON.stringify(rowsForExport);
+
+  }catch(err){
+    pBody.innerHTML = `<tr><td colspan="6" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+    pBody.dataset.rows = "[]";
   }
-  function exportParticipants(){
-    const rows = JSON.parse(pBody.dataset.rows || "[]");
-    if(!rows.length){ alert("Nada para exportar."); return; }
-    csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows.map(u=>({
-      nome:u.nome, cidade:u.cidade, whatsapp:u.whatsapp, created_at:u.created_at
-    })));
-  }
+}
+
+function exportParticipants(){
+  const rows = JSON.parse(pBody.dataset.rows || "[]");
+  if(!rows.length){ alert("Nada para exportar."); return; }
+  csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows);
+}
 
   // ====== VOUCHERS ======
   const vBody = $('v-table').querySelector('tbody');
