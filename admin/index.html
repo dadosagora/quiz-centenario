@@ -141,25 +141,31 @@
   </section>
 
   <!-- PARTICIPANTES -->
-  <section id="tab-participants" class="cards" style="display:none">
-    <div class="card">
-      <h2>Participantes</h2>
-      <div class="toolbar">
-        <input id="p-search" type="search" placeholder="Nome, cidade ou WhatsApp…"/>
-        <button class="btn" id="p-reload">Atualizar</button>
-        <button class="btn secondary" id="p-export">Exportar CSV</button>
-      </div>
-      <table id="p-table">
-       <table id="p-table">
-  <thead><tr>
-    <th>Nome</th><th>Cidade</th><th>WhatsApp</th><th>Data</th>
-    <th>Download</th><th>Nota (1ª / total)</th>
-  </tr></thead>
-  <tbody></tbody>
-</table>
-      <div class="muted" id="p-empty" style="display:none">Sem registros.</div>
+<section id="tab-participants" class="cards" style="display:none">
+  <div class="card">
+    <h2>Participantes</h2>
+    <div class="toolbar">
+      <input id="p-search" type="search" placeholder="Nome, cidade ou WhatsApp…"/>
+      <button class="btn" id="p-reload">Atualizar</button>
+      <button class="btn secondary" id="p-export">Exportar CSV</button>
     </div>
-  </section>
+
+    <table id="p-table">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cidade</th>
+          <th>WhatsApp</th>
+          <th>Data</th>
+          <th>Download</th>
+          <th>Nota (1ª / total)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="muted" id="p-empty" style="display:none">Sem registros.</div>
+  </div>
+</section>
 
   <!-- VOUCHERS -->
   <section id="tab-vouchers" class="cards" style="display:none">
@@ -502,12 +508,13 @@
     }
   }
 
-  // ====== PARTICIPANTES (lista + estatísticas) ======
-  const pBody = $('p-table').querySelector('tbody');
-  const pEmpty = $('p-empty');
-  $('p-reload').onclick = loadParticipants;
-  $('p-export').onclick = exportParticipants;
-  $('p-search').addEventListener('input', debounce(loadParticipants, 300));
+ // ====== PARTICIPANTES (lista + estatísticas) ======
+const pTable = $('p-table');
+const pBody  = pTable.tBodies[0] || pTable.appendChild(document.createElement('tbody'));
+const pEmpty = $('p-empty');
+$('p-reload').onclick = loadParticipants;
+$('p-export').onclick = exportParticipants;
+$('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
  async function loadParticipants(){
   pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
