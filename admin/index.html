@@ -301,7 +301,7 @@
     }
     return data;
   }
-
+    
   window.AdminAPI = {
     // perguntas (já existia)
     listQuestions : (filters={}) => callApi("admin-questions",  { action:"list",   filters }),
@@ -311,6 +311,9 @@
     // participantes (já existia)
     listParticipants: (search="") => callApi("admin-participants",{ action:"list",  search }),
 
+    // NOVA rota: estatísticas em lote para participantes
+    bulkStatsParticipants: (user_ids=[]) => callApi("admin-participants", { action:"stats_bulk", user_ids }),
+    
     // vouchers (já existia)
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
     redeemVoucher: (id) => callApi("admin-vouchers",{ action:"redeem", id }),
