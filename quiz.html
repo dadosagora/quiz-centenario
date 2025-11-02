@@ -98,12 +98,13 @@
       .btn{padding:9px 12px}
     }
 
-    /* Painel de Debug */
+    /* Painel de Debug (oculto) */
     .dbg {
       position: fixed; left: 8px; right: 8px; bottom: 8px;
       background: #111; color: #fff; font: 12px/1.3 system-ui, sans-serif;
       border-radius: 10px; padding: 8px 10px; opacity: .9; z-index: 9999;
-      pointer-events: none; /* evita bloquear cliques */
+      pointer-events: none;
+      display: none !important; /* mantém SEMPRE oculto */
     }
     .dbg b { color: #ffe082; }
     .dbg .bad { color: #ff8a80; }
@@ -186,8 +187,8 @@
   </footer>
 </div>
 
-<!-- Painel de debug -->
-<div id="__dbg" class="dbg" style="display:none"></div>
+<!-- Painel de debug (permanece no DOM, mas oculto) -->
+<div id="__dbg" class="dbg"></div>
 
 <script>
   (function guardAgainstReload(){
@@ -271,12 +272,14 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  const DEBUG = true;
-  const dbgEl = document.getElementById('__dbg');
-  if (dbgEl) { dbgEl.style.pointerEvents = 'none'; }
-  function dbgShow(msg){ if(!DEBUG) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
+  /* ===== Debug: painel OFF, logs ON ===== */
+  const DEBUG_PANEL = false;   // não mostra overlay
+  const DEBUG_LOGS  = true;    // continua registrando no Supabase
+  const dbgEl = document.getElementById('__dbg'); // permanece no DOM
+  if (dbgEl) dbgEl.style.display = 'none';
+  function dbgShow(msg){ if(!DEBUG_PANEL || !dbgEl) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
   async function dbgLog(where, extra={}){
-    if(!DEBUG) return;
+    if(!DEBUG_LOGS) return;
     try{
       await client.from('client_logs').insert({
         user_id: userId || null,
@@ -386,13 +389,12 @@
       if(!q){ showFinal(); return; }
       updateProgress();
 
-      // reset total de estado por pergunta
       currentAttempts = 0;
       hardResetLocks();
       els.feedback.textContent = '';
       els.feedback.className = 'feedback';
 
-      els.options.innerHTML = ''; // limpa DOM antes de injetar
+      els.options.innerHTML = '';
       els.question.textContent = q.enunciado || '';
       els.btnTryAgain.disabled = true;
       els.btnNext.disabled = true;
@@ -421,7 +423,7 @@
         </button>
       `).join('');
 
-      enableOptions(); // garante clique ativo
+      enableOptions();
       dbgLog('renderQuestion', { qid: q.id });
       dbgState();
 
@@ -431,7 +433,7 @@
     }
   }
 
-  // === Listener robusto para as opções (click + pointerup) ===
+  // Listener robusto (click + pointerup)
   function handleOptionActivate(ev){
     const btn = ev.target.closest('.opt');
     if (!btn || !els.options.contains(btn)) return;
@@ -535,7 +537,6 @@
       console.warn('downloads.insert exception:', e);
     }
   }
-
   (function wireDownloadLogging(){
     const a = document.getElementById('btnDownload') || document.getElementById('btndownload');
     if (!a) return;
@@ -647,7 +648,6 @@
 
   els.btnNext.addEventListener('click',async()=>{
     els.btnNext.blur();
-    // anti-lock antes de avançar
     hardResetLocks();
     dbgLog('next.click', { idxBefore: idxInBatch });
     dbgState('➡ avançando');
