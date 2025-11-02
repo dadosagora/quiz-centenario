@@ -511,21 +511,21 @@
     `).join('');
   }
 
-/* ===== LOGGER DE DOWNLOADS (compatível com sua tabela) ===== */
-async function logDownloadMinimal(href) {
-  // user_id precisa ser UUID ou NULL (sua coluna é uuid)
-  const raw = localStorage.getItem('hn_user_id') || null;
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw || '');
-  const user_id = isUUID ? raw : null;
-
-  const payload = { user_id, file: href };
-  console.log('[downloads] insert payload:', payload);
-
-  const { data, error } = await client.from('downloads').insert(payload).select('*');
-  if (error) {
-    console.error('[downloads] INSERT falhou:', error);
-  } else {
-    console.log('[downloads] INSERT OK:', data);
+/* ========= LOGGER DE DOWNLOADS ========= */
+async function logDownload({ user_id, code, url }) {
+  try {
+    const payload = {
+      user_id,
+      voucher_code: code || null,
+      file_url: url || null,
+      user_agent: navigator.userAgent || null,
+      referrer: document.referrer || null,
+      downloaded_at: new Date().toISOString()
+    };
+    const { error } = await client.from('downloads').insert(payload);
+    if (error) console.warn('downloads.insert falhou:', error.message);
+  } catch (e) {
+    console.warn('downloads.insert exception:', e);
   }
 }
 
