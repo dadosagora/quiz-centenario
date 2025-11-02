@@ -512,22 +512,42 @@
   }
 
 /* ========= LOGGER DE DOWNLOADS ========= */
-async function logDownload({ user_id, code, url }) {
+async function logDownload({ user_id, url }) {
   try {
     const payload = {
       user_id,
-      voucher_code: code || null,
-      file_url: url || null,
-      user_agent: navigator.userAgent || null,
-      referrer: document.referrer || null,
-      downloaded_at: new Date().toISOString()
+      file: url
     };
     const { error } = await client.from('downloads').insert(payload);
-    if (error) console.warn('downloads.insert falhou:', error.message);
+    if (error) {
+      console.warn('downloads.insert falhou:', error.message);
+    } else {
+      console.log('✅ Download registrado com sucesso em Supabase.');
+    }
   } catch (e) {
     console.warn('downloads.insert exception:', e);
   }
 }
+
+(function wireDownloadLogging(){
+  const a = document.getElementById('btnDownload');
+  if (!a) return;
+  a.addEventListener('click', async (ev) => {
+    const href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href)) return;
+
+    const w = window.open(href, '_blank', 'noopener');
+    try {
+      const user_id = localStorage.getItem('hn_user_id') || null;
+      await logDownload({ user_id, url: href });
+    } catch(_) {
+      console.warn('Falha ao registrar download.');
+    }
+
+    if (!w || w.closed) window.location.href = href;
+    ev.preventDefault();
+  }, { passive:false });
+})();
 
 (function wireDownloadLogging(){
   const a = document.getElementById('btnDownload') || document.getElementById('btndownload');
