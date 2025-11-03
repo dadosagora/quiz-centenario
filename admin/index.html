@@ -156,9 +156,9 @@
             <th>WhatsApp</th>
             <th>Data</th>
             <th>Download</th>
-            <th>Nota (1ª / total)</th>
             <th>Consentiu</th>
-            <th>Quando</th>
+            <th>Consentido em</th>
+            <th>Nota (1ª / total)</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -196,7 +196,7 @@
   <img class="banner" src="../assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos – banner"/>
 </footer>
 
-<!-- MODAL – Nova/Editar pergunta (sem categoria/dificuldade) -->
+<!-- MODAL – Nova/Editar pergunta -->
 <dialog id="dlg-q">
   <div class="modal-h" id="dlg-q-title">Nova pergunta</div>
   <div class="modal-b">
@@ -374,7 +374,6 @@
 
   $('q-search').addEventListener('input', debounce(loadQuestions, 300));
 
-  // delegação de eventos para Editar/Excluir
   qBody.addEventListener('click', (ev)=>{
     const btn = ev.target.closest('button[data-action]');
     if(!btn) return;
@@ -400,7 +399,6 @@
       };
       const { items } = await AdminAPI.listQuestions(filters);
 
-      // estatísticas em lote (se disponível)
       let statsById = {};
       try {
         const ids = items.map(r=>r.id);
@@ -510,7 +508,6 @@
       }
       pEmpty.style.display='none';
 
-      // stats em lote
       const userIds = items.map(u=>u.id);
       let statsMap = new Map();
       try{
@@ -521,15 +518,16 @@
       }
 
       pBody.innerHTML = items.map(u => {
+        // consent agora lê ranking_consent / ranking_consent_at (com fallback)
+        const consent = (u.ranking_consent ?? u.consent) ? true : false;
+        const consentAt = u.ranking_consent_at || u.consent_at || null;
+
         const st = statsMap.get(u.id) || {};
         const hasDownload = !!st.has_download;
-        const badge = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
+        const badgeDownload = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
         const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
         const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
         const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
-
-        const consentiu = u.ranking_consent ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
-        const consentAt = u.ranking_consent_at ? formatDate(u.ranking_consent_at) : '';
 
         return `
           <tr>
@@ -537,10 +535,10 @@
             <td>${esc(u.cidade)}</td>
             <td>${esc(u.whatsapp)}</td>
             <td>${formatDate(u.created_at)}</td>
-            <td>${badge}</td>
+            <td>${badgeDownload}</td>
+            <td>${consent ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>'}</td>
+            <td>${consentAt ? formatDate(consentAt) : '—'}</td>
             <td>${nota}</td>
-            <td>${consentiu}</td>
-            <td>${consentAt}</td>
           </tr>
         `;
       }).join('');
@@ -548,16 +546,18 @@
       // export
       const rowsForExport = items.map(u => {
         const st = statsMap.get(u.id) || {};
+        const consent = (u.ranking_consent ?? u.consent) ? true : false;
+        const consentAt = u.ranking_consent_at || u.consent_at || null;
         return {
           nome: u.nome,
           cidade: u.cidade,
           whatsapp: u.whatsapp,
           created_at: u.created_at,
           download: st.has_download ? 'Sim' : 'Não',
+          consentiu: consent ? 'Sim' : 'Não',
+          consentido_em: consentAt || '',
           acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
-          total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : '',
-          consentiu: u.ranking_consent ? 'Sim' : 'Não',
-          consentiu_quando: u.ranking_consent_at || ''
+          total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
         };
       });
       pBody.dataset.rows = JSON.stringify(rowsForExport);
