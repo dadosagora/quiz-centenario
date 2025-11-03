@@ -569,48 +569,43 @@
     }
   }
 
-<script>
-const LEADERBOARD_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/rapid-function";
-
-async function fetchLeaderboard(top = 50){
-  // 1) Tenta POST (o ideal)
-  try {
-    const res = await fetch(LEADERBOARD_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SUPABASE_ANON}`,
-        'apikey': SUPABASE_ANON,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ top })
-    });
-    if (res.status === 405) throw new Error('POST-405');
-    const raw = await res.text();
-    let data; try { data = JSON.parse(raw); } catch { throw new Error(`HTTP ${res.status} — resposta não-JSON: ${raw.slice(0,180)}`); }
-    if (!res.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.error || 'payload inválido');
-    return data.items;
-  } catch (err) {
-    // 2) Fallback GET (funciona mesmo se a função só aceitar GET)
-    if (String(err.message).includes('POST-405') || String(err.message).includes('method-not-allowed')) {
-      const url = new URL(LEADERBOARD_URL);
-      url.searchParams.set('top', String(top));
-      const res = await fetch(url, {
-        method: 'GET',
+  async function fetchLeaderboard(top = 50){
+    // 1) Tenta POST (o ideal)
+    try {
+      const res = await fetch(LEADERBOARD_URL, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${SUPABASE_ANON}`,
-          'apikey': SUPABASE_ANON
-        }
+          'apikey': SUPABASE_ANON,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ top })
       });
+      if (res.status === 405) throw new Error('POST-405');
       const raw = await res.text();
       let data; try { data = JSON.parse(raw); } catch { throw new Error(`HTTP ${res.status} — resposta não-JSON: ${raw.slice(0,180)}`); }
       if (!res.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.error || 'payload inválido');
       return data.items;
+    } catch (err) {
+      // 2) Fallback GET (se a função só aceitar GET)
+      if (String(err.message).includes('POST-405') || String(err.message).includes('method-not-allowed')) {
+        const url = new URL(LEADERBOARD_URL);
+        url.searchParams.set('top', String(top));
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON}`,
+            'apikey': SUPABASE_ANON
+          }
+        });
+        const raw = await res.text();
+        let data; try { data = JSON.parse(raw); } catch { throw new Error(`HTTP ${res.status} — resposta não-JSON: ${raw.slice(0,180)}`); }
+        if (!res.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.error || 'payload inválido');
+        return data.items;
+      }
+      throw err;
     }
-    throw err;
   }
-}
-</script>
-
 
   function renderLeaderboard(rows){
     const tbody = els.lbRows;
