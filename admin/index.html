@@ -157,6 +157,8 @@
             <th>Data</th>
             <th>Download</th>
             <th>Nota (1ª / total)</th>
+            <th>Consentiu</th>
+            <th>Quando</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -496,7 +498,7 @@
   $('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
   async function loadParticipants(){
-    pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
+    pBody.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
     try{
       const search = $('p-search').value.trim() || undefined;
       const { items } = await AdminAPI.listParticipants(search || "");
@@ -525,6 +527,10 @@
         const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
         const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
         const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
+
+        const consentiu = u.ranking_consent ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
+        const consentAt = u.ranking_consent_at ? formatDate(u.ranking_consent_at) : '';
+
         return `
           <tr>
             <td>${esc(u.nome)}</td>
@@ -533,6 +539,8 @@
             <td>${formatDate(u.created_at)}</td>
             <td>${badge}</td>
             <td>${nota}</td>
+            <td>${consentiu}</td>
+            <td>${consentAt}</td>
           </tr>
         `;
       }).join('');
@@ -547,13 +555,15 @@
           created_at: u.created_at,
           download: st.has_download ? 'Sim' : 'Não',
           acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
-          total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
+          total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : '',
+          consentiu: u.ranking_consent ? 'Sim' : 'Não',
+          consentiu_quando: u.ranking_consent_at || ''
         };
       });
       pBody.dataset.rows = JSON.stringify(rowsForExport);
 
     }catch(err){
-      pBody.innerHTML = `<tr><td colspan="6" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+      pBody.innerHTML = `<tr><td colspan="8" class="warn">Erro: ${esc(err.message)}</td></tr>`;
       pBody.dataset.rows = "[]";
     }
   }
