@@ -574,7 +574,7 @@
       els.progressBar.style.width = '100%';
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
-      const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias! Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
+      const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias. Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
       els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
 
       dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued, remaining });
