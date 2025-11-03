@@ -38,13 +38,11 @@
     footer{border-top:1px solid var(--border);padding:10px;display:flex;justify-content:center}
     .banner{max-width:100%;height:auto}
 
-    /* KPI grid */
     .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:10px;margin-top:10px}
     .kpi{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
     .kpi .label{color:#6b7280;font-size:12px}
     .kpi .value{font-weight:900;font-size:22px;margin-top:4px}
 
-    /* modal */
     dialog{border:0;border-radius:14px;padding:0;max-width:720px}
     .modal-h{padding:10px 14px;border-bottom:1px solid #eee;font-weight:800}
     .modal-b{padding:10px 14px}
@@ -55,9 +53,10 @@
     textarea{min-height:72px;resize:vertical}
     .modal-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #eee}
 
-    /* dashboard split */
     .dash-split{display:grid;grid-template-columns:2fr 1fr;gap:12px}
   </style>
+  <!-- supabase client para buscar consentimentos diretamente da tabela users -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <header>
@@ -91,7 +90,6 @@
       </div>
       <div class="muted">Métricas gerais (todo o período)</div>
 
-      <!-- KPIs -->
       <div class="kpi-grid">
         <div class="kpi"><div class="label">Perguntas ativas</div><div id="kpi-questions" class="value">—</div></div>
         <div class="kpi"><div class="label">Participantes (total)</div><div id="kpi-users" class="value">—</div></div>
@@ -157,7 +155,6 @@
             <th>Data</th>
             <th>Download</th>
             <th>Consentiu</th>
-            <th>Consentido em</th>
             <th>Nota (1ª / total)</th>
           </tr>
         </thead>
@@ -315,11 +312,15 @@
     participantsStats: (ids=[]) => callApi("admin-participants", { action:"stats_bulk", ids }),
     questionsStats: (ids=[]) => callApi("admin-questions", { action:"stats_bulk", ids }),
   };
+
+  // cliente supabase (para buscar ranking_consent direto da users)
+  const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
+  const supa = window.supabase.createClient(SUPABASE_URL, ANON);
 </script>
 <!-- === /Admin API Helper === -->
 
 <script>
-  // ====== DASHBOARD ======
+  // ====== DASH ======
   async function loadDash(){
     try{
       const [qRes, pRes, vRes] = await Promise.allSettled([
@@ -333,11 +334,11 @@
       const vs = (vRes.status==='fulfilled' && Array.isArray(vRes.value?.items)) ? vRes.value.items : [];
 
       const actives = qs.filter(q=>q.ativa).length;
-      $('kpi-questions').textContent = `${actives} / ${qs.length}`;
-      $('kpi-users').textContent     = String(ps.length);
-      $('kpi-v7').textContent        = String(vs.length);
+      document.getElementById('kpi-questions').textContent = `${actives} / ${qs.length}`;
+      document.getElementById('kpi-users').textContent     = String(ps.length);
+      document.getElementById('kpi-v7').textContent        = String(vs.length);
       const redeemedTotal            = vs.filter(v=>v.status==='retirado').length;
-      $('kpi-r7').textContent        = String(redeemedTotal);
+      document.getElementById('kpi-r7').textContent        = String(redeemedTotal);
 
       const byPartner = {};
       for (const v of vs){
@@ -347,12 +348,12 @@
         if(v.status==='retirado') byPartner[p].redeemed++;
       }
       const rows = Object.entries(byPartner).sort((a,b)=>b[1].redeemed - a[1].redeemed);
-      $('t-partners').innerHTML = rows.length
+      document.getElementById('t-partners').innerHTML = rows.length
         ? rows.map(([name,agg])=>`<tr><td>${esc(name)}</td><td>${agg.issued}</td><td>${agg.redeemed}</td></tr>`).join('')
         : `<tr><td colspan="3" class="muted">Sem dados</td></tr>`;
 
       const last = ps.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10);
-      $('ul-recent').innerHTML = last.length
+      document.getElementById('ul-recent').innerHTML = last.length
         ? last.map(u=>`<li style="padding:6px 0;border-top:1px solid #eee">
             <strong>${esc(u.nome||'—')}</strong> · ${esc(u.cidade||'—')}
             <div class="muted">${formatDate(u.created_at)}</div>
@@ -361,18 +362,18 @@
 
     }catch(err){
       console.error('Falha no dashboard', err);
-      ['kpi-questions','kpi-users','kpi-v7','kpi-r7'].forEach(id => $(id).textContent = '—');
-      $('t-partners').innerHTML = `<tr><td colspan="3" class="warn">Erro ao carregar</td></tr>`;
-      $('ul-recent').innerHTML  = `<li class="warn">Erro ao carregar</li>`;
+      ['kpi-questions','kpi-users','kpi-v7','kpi-r7'].forEach(id => document.getElementById(id).textContent = '—');
+      document.getElementById('t-partners').innerHTML = `<tr><td colspan="3" class="warn">Erro ao carregar</td></tr>`;
+      document.getElementById('ul-recent').innerHTML  = `<li class="warn">Erro ao carregar</li>`;
     }
   }
 
-  // ====== PERGUNTAS (CRUD + estatísticas) ======
-  const qBody = $('q-table').querySelector('tbody');
-  const qEmpty = $('q-empty');
-  $('q-new').onclick = ()=> openQ(); // novo vazio
+  // ====== PERGUNTAS ======
+  const qBody = document.getElementById('q-table').querySelector('tbody');
+  const qEmpty = document.getElementById('q-empty');
+  document.getElementById('q-new').onclick = ()=> openQ();
 
-  $('q-search').addEventListener('input', debounce(loadQuestions, 300));
+  document.getElementById('q-search').addEventListener('input', debounce(loadQuestions, 300));
 
   qBody.addEventListener('click', (ev)=>{
     const btn = ev.target.closest('button[data-action]');
@@ -394,9 +395,7 @@
   async function loadQuestions(){
     qBody.innerHTML = '<tr><td colspan="10">Carregando…</td></tr>';
     try{
-      const filters = {
-        search: $('q-search').value.trim() || undefined
-      };
+      const filters = { search: (document.getElementById('q-search').value.trim() || undefined) };
       const { items } = await AdminAPI.listQuestions(filters);
 
       let statsById = {};
@@ -437,31 +436,31 @@
   }
 
   function openQ(data){
-    const dlg = $('dlg-q'); $('dlg-q-title').textContent = data && data.id ? 'Editar pergunta' : 'Nova pergunta';
+    const dlg = document.getElementById('dlg-q'); document.getElementById('dlg-q-title').textContent = data && data.id ? 'Editar pergunta' : 'Nova pergunta';
     data = data || {};
-    $('f-enunciado').value = data.enunciado || '';
-    $('f-a').value = data.alternativa_a || '';
-    $('f-b').value = data.alternativa_b || '';
-    $('f-c').value = data.alternativa_c || '';
-    $('f-d').value = data.alternativa_d || '';
-    $('f-correta').value = (String(data.correta||'a').toLowerCase().match(/[abcd]/)||['a'])[0];
-    $('f-ativa').value = data.ativa ? 'true':'false';
+    document.getElementById('f-enunciado').value = data.enunciado || '';
+    document.getElementById('f-a').value = data.alternativa_a || '';
+    document.getElementById('f-b').value = data.alternativa_b || '';
+    document.getElementById('f-c').value = data.alternativa_c || '';
+    document.getElementById('f-d').value = data.alternativa_d || '';
+    document.getElementById('f-correta').value = (String(data.correta||'a').toLowerCase().match(/[abcd]/)||['a'])[0];
+    document.getElementById('f-ativa').value = data.ativa ? 'true':'false';
     dlg.dataset.id = data.id || '';
     dlg.showModal();
   }
-  function closeQ(){ $('dlg-q').close(); }
+  function closeQ(){ document.getElementById('dlg-q').close(); }
 
-  $('btnSaveQ').onclick = async ()=>{
-    const id = $('dlg-q').dataset.id || undefined;
+  document.getElementById('btnSaveQ').onclick = async ()=>{
+    const id = document.getElementById('dlg-q').dataset.id || undefined;
     const item = {
       id,
-      enunciado: $('f-enunciado').value.trim(),
-      alternativa_a: $('f-a').value.trim(),
-      alternativa_b: $('f-b').value.trim(),
-      alternativa_c: $('f-c').value.trim(),
-      alternativa_d: $('f-d').value.trim(),
-      correta: $('f-correta').value,
-      ativa: $('f-ativa').value === 'true'
+      enunciado: document.getElementById('f-enunciado').value.trim(),
+      alternativa_a: document.getElementById('f-a').value.trim(),
+      alternativa_b: document.getElementById('f-b').value.trim(),
+      alternativa_c: document.getElementById('f-c').value.trim(),
+      alternativa_d: document.getElementById('f-d').value.trim(),
+      correta: document.getElementById('f-correta').value,
+      ativa: document.getElementById('f-ativa').value === 'true'
     };
     if(!item.enunciado || !item.alternativa_a || !item.alternativa_b || !item.alternativa_c || !item.alternativa_d){
       alert('Preencha enunciado e todas as alternativas.'); return;
@@ -488,17 +487,17 @@
   }
 
   // ====== PARTICIPANTES ======
-  const pTable = $('p-table');
+  const pTable = document.getElementById('p-table');
   const pBody  = pTable.tBodies[0] || pTable.appendChild(document.createElement('tbody'));
-  const pEmpty = $('p-empty');
-  $('p-reload').onclick = loadParticipants;
-  $('p-export').onclick = exportParticipants;
-  $('p-search').addEventListener('input', debounce(loadParticipants, 300));
+  const pEmpty = document.getElementById('p-empty');
+  document.getElementById('p-reload').onclick = loadParticipants;
+  document.getElementById('p-export').onclick = exportParticipants;
+  document.getElementById('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
   async function loadParticipants(){
-    pBody.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
+    pBody.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
     try{
-      const search = $('p-search').value.trim() || undefined;
+      const search = document.getElementById('p-search').value.trim() || undefined;
       const { items } = await AdminAPI.listParticipants(search || "");
       if(!items.length){ 
         pBody.innerHTML=''; 
@@ -509,6 +508,29 @@
       pEmpty.style.display='none';
 
       const userIds = items.map(u=>u.id);
+
+      // (A) tentar usar os campos já vindos do endpoint
+      let consentMap = new Map();
+      items.forEach(u=>{
+        if (typeof u.ranking_consent !== 'undefined') {
+          consentMap.set(u.id, !!u.ranking_consent);
+        }
+      });
+
+      // (B) se não veio, buscamos direto na tabela users (id, ranking_consent)
+      if (consentMap.size === 0 && userIds.length){
+        try{
+          const { data, error } = await supa
+            .from('users')
+            .select('id, ranking_consent')
+            .in('id', userIds);
+          if (!error && Array.isArray(data)) {
+            data.forEach(row => consentMap.set(row.id, !!row.ranking_consent));
+          }
+        }catch(_){}
+      }
+
+      // stats em lote
       let statsMap = new Map();
       try{
         const statsRes = await AdminAPI.bulkStatsParticipants(userIds);
@@ -518,13 +540,12 @@
       }
 
       pBody.innerHTML = items.map(u => {
-        // consent agora lê ranking_consent / ranking_consent_at (com fallback)
-        const consent = (u.ranking_consent ?? u.consent) ? true : false;
-        const consentAt = u.ranking_consent_at || u.consent_at || null;
-
         const st = statsMap.get(u.id) || {};
         const hasDownload = !!st.has_download;
         const badgeDownload = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
+
+        const consent = consentMap.has(u.id) ? consentMap.get(u.id) : false;
+
         const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
         const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
         const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
@@ -537,17 +558,15 @@
             <td>${formatDate(u.created_at)}</td>
             <td>${badgeDownload}</td>
             <td>${consent ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>'}</td>
-            <td>${consentAt ? formatDate(consentAt) : '—'}</td>
             <td>${nota}</td>
           </tr>
         `;
       }).join('');
 
-      // export
+      // export CSV
       const rowsForExport = items.map(u => {
         const st = statsMap.get(u.id) || {};
-        const consent = (u.ranking_consent ?? u.consent) ? true : false;
-        const consentAt = u.ranking_consent_at || u.consent_at || null;
+        const consent = consentMap.has(u.id) ? consentMap.get(u.id) : false;
         return {
           nome: u.nome,
           cidade: u.cidade,
@@ -555,7 +574,6 @@
           created_at: u.created_at,
           download: st.has_download ? 'Sim' : 'Não',
           consentiu: consent ? 'Sim' : 'Não',
-          consentido_em: consentAt || '',
           acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
           total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
         };
@@ -563,7 +581,7 @@
       pBody.dataset.rows = JSON.stringify(rowsForExport);
 
     }catch(err){
-      pBody.innerHTML = `<tr><td colspan="8" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+      pBody.innerHTML = `<tr><td colspan="7" class="warn">Erro: ${esc(err.message)}</td></tr>`;
       pBody.dataset.rows = "[]";
     }
   }
@@ -575,17 +593,17 @@
   }
 
   // ====== VOUCHERS ======
-  const vBody = $('v-table').querySelector('tbody');
-  const vEmpty = $('v-empty');
-  $('v-reload').onclick = loadVouchers;
-  $('v-status').addEventListener('change', loadVouchers);
-  $('v-search').addEventListener('input', debounce(loadVouchers, 300));
+  const vBody = document.getElementById('v-table').querySelector('tbody');
+  const vEmpty = document.getElementById('v-empty');
+  document.getElementById('v-reload').onclick = loadVouchers;
+  document.getElementById('v-status').addEventListener('change', loadVouchers);
+  document.getElementById('v-search').addEventListener('input', debounce(loadVouchers, 300));
 
   async function loadVouchers(){
     vBody.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
     try{
-      const search = $('v-search').value.trim() || "";
-      const status = $('v-status').value || "";
+      const search = document.getElementById('v-search').value.trim() || "";
+      const status = document.getElementById('v-status').value || "";
       const { items } = await AdminAPI.listVouchers({ search, status });
       if(!items.length){ vBody.innerHTML=''; vEmpty.style.display='block'; return; }
       vEmpty.style.display='none';
