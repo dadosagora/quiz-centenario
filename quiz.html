@@ -551,23 +551,23 @@
     }, { passive:false });
   })();
 
-  /* ===== RANKING ===== */
-  async function updateRankingConsent(accepted){
-    try{
-      const { error } = await client
-        .from('users')
-        .update({
-          ranking_consent: !!accepted,
-          ranking_consent_at: new Date().toISOString()
-        })
-        .eq('id', userId);
-      if(error) throw error;
-      return true;
-    }catch(e){
-      console.warn('Falha ao gravar consentimento de ranking:', e);
-      return false;
-    }
+ /* ===== RANKING ===== */
+async function updateRankingConsent(accepted){
+  try{
+    const { error } = await client
+      .from('users')
+      .update({
+        ranking_consent: !!accepted,
+        ranking_consent_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+    if(error) throw error;
+    return true;
+  }catch(e){
+    console.warn('Falha ao gravar consentimento de ranking:', e);
+    return false;
   }
+}
 
   async function fetchLeaderboard(top = 50){
     // 1) Tenta POST (o ideal)
