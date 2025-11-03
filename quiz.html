@@ -190,14 +190,14 @@
           <div id="lbMsg" class="note" style="margin-top:6px"></div>
         </div>
 
-        <!-- Tabela de Ranking -->
+        <!-- Tabela de Ranking (apenas Pos. | Nome | Acertos 1ª) -->
         <div id="leaderboard" style="display:none; max-width:760px; margin:14px auto 0; padding:0">
           <h3 style="margin:0 0 8px; font-size:clamp(18px,3.8vw,22px)">Ranking do Quiz</h3>
           <div style="overflow:auto">
             <table class="lb-table">
               <thead>
                 <tr>
-                  <th>Pos.</th><th>Nome</th><th>Cidade</th><th>Acertos 1ª</th><th>Respondidas</th><th>%</th>
+                  <th>Pos.</th><th>Nome</th><th>Acertos 1ª</th>
                 </tr>
               </thead>
               <tbody id="lbRows"></tbody>
@@ -240,10 +240,10 @@
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
 
-  /* (3) lotes de 10 */
+  /* lotes de 10 */
   const BATCH_SIZE = 10;
 
-  /* Leaderboard: sua Edge Function publicada como rapid-function */
+  /* Leaderboard: Edge Function publicada como rapid-function */
   const LEADERBOARD_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/rapid-function";
 
   const PARTNERS = [
@@ -293,8 +293,8 @@
   let allQuestions = [];
   let askedIds = new Set();
 
-  let answeredTotal = 0;
-  let totalConcluidas = 0;
+  let answeredTotal = 0;      // acertos de primeira (global)
+  let totalConcluidas = 0;    // perguntas concluídas (global)
 
   let batch = [];
   let idxInBatch = 0;
@@ -551,23 +551,23 @@
     }, { passive:false });
   })();
 
- /* ===== RANKING ===== */
-async function updateRankingConsent(accepted){
-  try{
-    const { error } = await client
-      .from('users')
-      .update({
-        ranking_consent: !!accepted,
-        ranking_consent_at: new Date().toISOString()
-      })
-      .eq('id', userId);
-    if(error) throw error;
-    return true;
-  }catch(e){
-    console.warn('Falha ao gravar consentimento de ranking:', e);
-    return false;
+  /* ===== RANKING ===== */
+  async function updateRankingConsent(accepted){
+    try{
+      const { error } = await client
+        .from('users')
+        .update({
+          ranking_consent: !!accepted,
+          ranking_consent_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+      if(error) throw error;
+      return true;
+    }catch(e){
+      console.warn('Falha ao gravar consentimento de ranking:', e);
+      return false;
+    }
   }
-}
 
   async function fetchLeaderboard(top = 50){
     // 1) Tenta POST (o ideal)
@@ -607,23 +607,36 @@ async function updateRankingConsent(accepted){
     }
   }
 
+  // garante que quem acabou de consentir apareça na lista
+  async function ensureSelfInList(items){
+    try{
+      if(!userId) return items;
+      if(items.some(r => r.id === userId)) return items;
+
+      const { data, error } = await client
+        .from('public_leaderboard_v')
+        .select('id,nome,first_try_hits,total_answered')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if(!error && data){ return [...items, data]; }
+      return items;
+    }catch(_){ return items; }
+  }
+
   function renderLeaderboard(rows){
+    const sorted = [...rows].sort((a,b)=>(b.first_try_hits||0) - (a.first_try_hits||0));
     const tbody = els.lbRows;
-    if(!rows.length){
-      tbody.innerHTML = `<tr><td colspan="6" style="padding:10px;color:#666">Sem classificados ainda.</td></tr>`;
+
+    if(!sorted.length){
+      tbody.innerHTML = `<tr><td colspan="3" style="padding:10px;color:#666">Sem classificados ainda.</td></tr>`;
     }else{
-      tbody.innerHTML = rows.map((r,i)=>{
-        const pct = (r.total_answered > 0) ? Math.round((r.first_try_hits / r.total_answered) * 100) : 0;
-        return `
-          <tr>
-            <td>${i+1}</td>
-            <td>${(r.nome||'—')}</td>
-            <td>${(r.cidade||'—')}</td>
-            <td>${r.first_try_hits ?? 0}</td>
-            <td>${r.total_answered ?? 0}</td>
-            <td>${pct}%</td>
-          </tr>`;
-      }).join('');
+      tbody.innerHTML = sorted.map((r,i)=>`
+        <tr${r.id===userId ? ' style="font-weight:800;"' : ''}>
+          <td>${i+1}</td>
+          <td>${(r.nome||'—')}</td>
+          <td>${r.first_try_hits ?? 0}</td>
+        </tr>`).join('');
     }
     els.leaderboard.style.display = 'block';
   }
@@ -642,7 +655,6 @@ async function updateRankingConsent(accepted){
       const totalAtivas = allQuestions.length;
       const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
 
-      // frase pedida em (2)
       const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
 
       if (primeiroLote) {
@@ -658,7 +670,7 @@ async function updateRankingConsent(accepted){
         window.__voucherIssued = true;
 
         els.voucherBox.style.display = 'block';
-        els.downloadRow.style.display = 'none'; // download só no fim de tudo
+        els.downloadRow.style.display = 'none';
 
         els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
         els.finalSubtitle.textContent = instruction;
@@ -680,7 +692,6 @@ async function updateRankingConsent(accepted){
       els.leaderboard.style.display = 'none';
 
       if (remaining === 0) {
-        // Libera download do PDF
         if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
           els.btnDownload.href = PDF_URL;
           els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
@@ -706,8 +717,11 @@ async function updateRankingConsent(accepted){
           try{
             const ok = await updateRankingConsent(true);
             if(!ok) throw new Error('Não foi possível salvar sua autorização agora.');
-            const items = await fetchLeaderboard(50);
+
+            let items = await fetchLeaderboard(50);
+            items = await ensureSelfInList(items);
             renderLeaderboard(items);
+
             els.lbConsent.style.display = 'none';
           }catch(e){
             els.lbMsg.textContent = 'Falha ao carregar o ranking. Tente novamente.';
@@ -718,7 +732,6 @@ async function updateRankingConsent(accepted){
         };
 
         els.lbSkip.onclick = async ()=>{
-          // Não exibe ranking (mantém só nota individual)
           els.lbConsent.style.display = 'none';
           els.leaderboard.style.display = 'none';
           try{ await updateRankingConsent(false); }catch(_) {}
@@ -730,8 +743,9 @@ async function updateRankingConsent(accepted){
       els.progressBar.style.width = '100%';
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
-      const msg = `Acabei de fazer o Quiz do Centenário de Criciúma do HN Notícias. Responda também e descubra quanto você conhece sobre a nossa história: ${shareLink}`;
-      els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+      // mensagem mais instigante com a pontuação de primeira
+      const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas de primeira no Quiz do Centenário de Criciúma! 🟨🖤 Tenta bater minha marca: ${shareLink}`;
+      els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
 
       dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued, remaining });
 
