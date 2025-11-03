@@ -32,7 +32,7 @@
     th,td{padding:8px;border-bottom:1px solid #efefef;font-size:14px;vertical-align:top}
     th{text-align:left;color:#444}
     .chip{display:inline-block;background:var(--chip);border:1px solid #eee;border-radius:999px;padding:4px 8px;font-size:12px}
-    td.actions{display:flex;gap:6px} /* <- corrigido (antes .actions td) */
+    td.actions{display:flex;gap:6px}
     .muted{color:var(--muted);font-size:12px}
     .warn{color:#b00020}
     footer{border-top:1px solid var(--border);padding:10px;display:flex;justify-content:center}
@@ -124,14 +124,12 @@
       <h2>Perguntas</h2>
       <div class="toolbar">
         <input id="q-search" type="search" placeholder="Buscar enunciado…"/>
-        <select id="q-filter-cat"><option value="">Todas categorias</option></select>
-        <select id="q-filter-dif"><option value="">Todas dificuldades</option></select>
         <button class="btn" id="q-new">+ Nova</button>
       </div>
       <table id="q-table">
         <thead><tr>
           <th>Enunciado</th><th>A</th><th>B</th><th>C</th><th>D</th>
-          <th>Correta</th><th>Ativa</th><th>Cat.</th><th>Dif.</th>
+          <th>Correta</th><th>Ativa</th>
           <th>Acertos</th><th>Erros</th><th>Ações</th>
         </tr></thead>
         <tbody></tbody>
@@ -150,22 +148,22 @@
         <button class="btn secondary" id="p-export">Exportar CSV</button>
       </div>
 
-    <table id="p-table">
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Cidade</th>
-          <th>WhatsApp</th>
-          <th>Data</th>
-          <th>Download</th>
-          <th>Nota (1ª / total)</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <div class="muted" id="p-empty" style="display:none">Sem registros.</div>
-  </div>
-</section>
+      <table id="p-table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Cidade</th>
+            <th>WhatsApp</th>
+            <th>Data</th>
+            <th>Download</th>
+            <th>Nota (1ª / total)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="muted" id="p-empty" style="display:none">Sem registros.</div>
+    </div>
+  </section>
 
   <!-- VOUCHERS -->
   <section id="tab-vouchers" class="cards" style="display:none">
@@ -196,7 +194,7 @@
   <img class="banner" src="../assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos – banner"/>
 </footer>
 
-<!-- MODAL – Nova/Editar pergunta -->
+<!-- MODAL – Nova/Editar pergunta (sem categoria/dificuldade) -->
 <dialog id="dlg-q">
   <div class="modal-h" id="dlg-q-title">Nova pergunta</div>
   <div class="modal-b">
@@ -222,14 +220,6 @@
         <select id="f-ativa"><option value="true">Sim</option><option value="false">Não</option></select>
       </label>
     </div>
-    <div class="row">
-      <label><span>Categoria</span><input id="f-cat" type="text" placeholder="História, Cultura…"></label>
-      <label><span>Dificuldade</span>
-        <select id="f-dif">
-          <option>Fácil</option><option>Médio</option><option>Difícil</option>
-        </select>
-      </label>
-    </div>
     <div class="muted" id="dlg-q-tip">Dica: use sempre a/b/c/d na coluna “correta”.</div>
   </div>
   <div class="modal-f">
@@ -239,7 +229,7 @@
 </dialog>
 
 <script>
-  // ====== AUTENTICAÇÃO (token em localStorage) ======
+  // ====== AUTENTICAÇÃO ======
   const token = localStorage.getItem('hn_admin_token');
   if(!token){ window.location.href = "login.html"; }
 
@@ -281,7 +271,7 @@
   }
 </script>
 
-<!-- === Admin API Helper (único) === -->
+<!-- === Admin API Helper === -->
 <script>
   const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
   const ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
@@ -310,20 +300,16 @@
   }
     
   window.AdminAPI = {
-    // perguntas
     listQuestions : (filters={}) => callApi("admin-questions",  { action:"list",   filters }),
     saveQuestion  : (item)       => callApi("admin-questions",  { action:"upsert", item }),
     deleteQuestion: (id)         => callApi("admin-questions",  { action:"delete", id }),
 
-    // participantes
     listParticipants: (search="") => callApi("admin-participants",{ action:"list",  search }),
     bulkStatsParticipants: (user_ids=[]) => callApi("admin-participants", { action:"stats_bulk", user_ids }),
     
-    // vouchers
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
     redeemVoucher: (id) => callApi("admin-vouchers",{ action:"redeem", id }),
 
-    // estatísticas auxiliares
     participantsStats: (ids=[]) => callApi("admin-participants", { action:"stats_bulk", ids }),
     questionsStats: (ids=[]) => callApi("admin-questions", { action:"stats_bulk", ids }),
   };
@@ -385,8 +371,6 @@
   $('q-new').onclick = ()=> openQ(); // novo vazio
 
   $('q-search').addEventListener('input', debounce(loadQuestions, 300));
-  $('q-filter-cat').addEventListener('change', loadQuestions);
-  $('q-filter-dif').addEventListener('change', loadQuestions);
 
   // delegação de eventos para Editar/Excluir
   qBody.addEventListener('click', (ev)=>{
@@ -407,18 +391,12 @@
   });
 
   async function loadQuestions(){
-    qBody.innerHTML = '<tr><td colspan="12">Carregando…</td></tr>';
+    qBody.innerHTML = '<tr><td colspan="10">Carregando…</td></tr>';
     try{
       const filters = {
-        search: $('q-search').value.trim() || undefined,
-        categoria: $('q-filter-cat').value || undefined,
-        dificuldade: $('q-filter-dif').value || undefined
+        search: $('q-search').value.trim() || undefined
       };
       const { items } = await AdminAPI.listQuestions(filters);
-
-      // prepara selects
-      fillSelectUnique(items, 'categoria', $('q-filter-cat'));
-      fillSelectUnique(items, 'dificuldade', $('q-filter-dif'));
 
       // estatísticas em lote (se disponível)
       let statsById = {};
@@ -445,8 +423,6 @@
           <td>${esc(row.alternativa_d)}</td>
           <td><span class="chip">${String(row.correta||'').toUpperCase()}</span></td>
           <td>${row.ativa ? 'Sim':'Não'}</td>
-          <td>${esc(row.categoria||'')}</td>
-          <td>${esc(row.dificuldade||'')}</td>
           <td>${ac}</td>
           <td>${er}</td>
           <td class="actions">
@@ -456,16 +432,8 @@
         </tr>`;
       }).join('');
     }catch(err){
-      qBody.innerHTML = `<tr><td colspan="12" class="warn">Erro ao carregar: ${esc(err.message)}</td></tr>`;
+      qBody.innerHTML = `<tr><td colspan="10" class="warn">Erro ao carregar: ${esc(err.message)}</td></tr>`;
     }
-  }
-
-  function fillSelectUnique(items, key, selectEl){
-    const current = selectEl.value;
-    const set = new Set(items.map(i=> (i[key]||'').toString().trim()).filter(Boolean));
-    const opts = ['<option value="">Todas</option>', ...Array.from(set).sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'})).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`)];
-    selectEl.innerHTML = opts.join('');
-    if(current) selectEl.value = current;
   }
 
   function openQ(data){
@@ -478,8 +446,6 @@
     $('f-d').value = data.alternativa_d || '';
     $('f-correta').value = (String(data.correta||'a').toLowerCase().match(/[abcd]/)||['a'])[0];
     $('f-ativa').value = data.ativa ? 'true':'false';
-    $('f-cat').value = data.categoria || '';
-    $('f-dif').value = data.dificuldade || 'Fácil';
     dlg.dataset.id = data.id || '';
     dlg.showModal();
   }
@@ -495,9 +461,7 @@
       alternativa_c: $('f-c').value.trim(),
       alternativa_d: $('f-d').value.trim(),
       correta: $('f-correta').value,
-      ativa: $('f-ativa').value === 'true',
-      categoria: $('f-cat').value.trim(),
-      dificuldade: $('f-dif').value.trim()
+      ativa: $('f-ativa').value === 'true'
     };
     if(!item.enunciado || !item.alternativa_a || !item.alternativa_b || !item.alternativa_c || !item.alternativa_d){
       alert('Preencha enunciado e todas as alternativas.'); return;
@@ -523,7 +487,7 @@
     }
   }
 
-  // ====== PARTICIPANTES (lista + estatísticas) ======
+  // ====== PARTICIPANTES ======
   const pTable = $('p-table');
   const pBody  = pTable.tBodies[0] || pTable.appendChild(document.createElement('tbody'));
   const pEmpty = $('p-empty');
