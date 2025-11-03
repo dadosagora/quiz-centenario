@@ -569,14 +569,26 @@
     }
   }
 
-  async function fetchLeaderboard(top = 50){
-    const url = `${LEADERBOARD_URL}?top=${encodeURIComponent(top)}`;
-    const res = await fetch(url, { method:'GET' });
-    if(!res.ok) throw new Error(`ranking HTTP ${res.status}`);
-    const j = await res.json();
-    if(!j.ok || !Array.isArray(j.items)) throw new Error('ranking payload inválido');
-    return j.items;
+ async function fetchLeaderboard(top = 50){
+  const res = await fetch(LEADERBOARD_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_ANON}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ top })
+  });
+
+  const raw = await res.text();
+  let data;
+  try { data = JSON.parse(raw); } catch {
+    throw new Error(`HTTP ${res.status} — resposta não-JSON: ${raw.slice(0,160)}`);
   }
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!data.ok || !Array.isArray(data.items)) throw new Error('payload inválido do ranking');
+  return data.items;
+}
+
 
   function renderLeaderboard(rows){
     const tbody = els.lbRows;
