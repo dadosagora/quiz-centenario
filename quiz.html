@@ -243,7 +243,7 @@
   /* lotes de 10 */
   const BATCH_SIZE = 10;
 
-  /* Leaderboard: Edge Function publicada como rapid-function */
+  /* (mantido por compatibilidade, mas não usado neste build) */
   const LEADERBOARD_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/rapid-function";
 
   const PARTNERS = [
@@ -329,7 +329,7 @@
     let timer;
     const timeout = new Promise((_, rej)=>{ timer = setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)), ms); });
     try{ const res = await Promise.race([promise, timeout]); clearTimeout(timer); return res; }
-    catch(err){ clearTimeout(timer); try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent: navigator.userAgent, current_url: location.href }); }catch(_){} throw err; }
+    catch(err){ clearTimeout(timer); try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent:navigator.userAgent, current_url: location.href }); }catch(_){} throw err; }
   }
 
   async function insertSubmission({ user_id, question_id, first_try_correct }){
@@ -569,45 +569,24 @@
     }
   }
 
+  // Busca direto na view (sem Edge Function), ordenado por acertos de 1ª
   async function fetchLeaderboard(top = 50){
-    // 1) Tenta POST (o ideal)
-    try {
-      const res = await fetch(LEADERBOARD_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON}`,
-          'apikey': SUPABASE_ANON,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ top })
-      });
-      if (res.status === 405) throw new Error('POST-405');
-      const raw = await res.text();
-      let data; try { data = JSON.parse(raw); } catch { throw new Error(`HTTP ${res.status} — resposta não-JSON: ${raw.slice(0,180)}`); }
-      if (!res.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.error || 'payload inválido');
-      return data.items;
-    } catch (err) {
-      // 2) Fallback GET (se a função só aceitar GET)
-      if (String(err.message).includes('POST-405') || String(err.message).includes('method-not-allowed')) {
-        const url = new URL(LEADERBOARD_URL);
-        url.searchParams.set('top', String(top));
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_ANON}`,
-            'apikey': SUPABASE_ANON
-          }
-        });
-        const raw = await res.text();
-        let data; try { data = JSON.parse(raw); } catch { throw new Error(`HTTP ${res.status} — resposta não-JSON: ${raw.slice(0,180)}`); }
-        if (!res.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.error || 'payload inválido');
-        return data.items;
-      }
-      throw err;
+    try{
+      const { data, error } = await client
+        .from('public_leaderboard_v')
+        .select('id,nome,first_try_hits,total_answered')
+        .order('first_try_hits', { ascending:false })
+        .limit(top);
+
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    }catch(e){
+      console.warn('fallback leaderboard error:', e);
+      return [];
     }
   }
 
-  // garante que quem acabou de consentir apareça na lista
+  // garante que quem acabou de consentir apareça mesmo fora do TOP inicial
   async function ensureSelfInList(items){
     try{
       if(!userId) return items;
@@ -619,7 +598,11 @@
         .eq('id', userId)
         .maybeSingle();
 
-      if(!error && data){ return [...items, data]; }
+      if(!error && data){
+        return [...items, data]
+          .sort((a,b)=>(b.first_try_hits||0)-(a.first_try_hits||0))
+          .slice(0, 50);
+      }
       return items;
     }catch(_){ return items; }
   }
@@ -717,6 +700,9 @@
           try{
             const ok = await updateRankingConsent(true);
             if(!ok) throw new Error('Não foi possível salvar sua autorização agora.');
+
+            // pequena espera para a view refletir a atualização
+            await new Promise(r => setTimeout(r, 250));
 
             let items = await fetchLeaderboard(50);
             items = await ensureSelfInList(items);
