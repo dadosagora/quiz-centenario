@@ -32,7 +32,7 @@
     th,td{padding:8px;border-bottom:1px solid #efefef;font-size:14px;vertical-align:top}
     th{text-align:left;color:#444}
     .chip{display:inline-block;background:var(--chip);border:1px solid #eee;border-radius:999px;padding:4px 8px;font-size:12px}
-    .actions td{display:flex;gap:6px}
+    td.actions{display:flex;gap:6px} /* <- corrigido (antes .actions td) */
     .muted{color:var(--muted);font-size:12px}
     .warn{color:#b00020}
     footer{border-top:1px solid var(--border);padding:10px;display:flex;justify-content:center}
@@ -141,14 +141,14 @@
   </section>
 
   <!-- PARTICIPANTES -->
-<section id="tab-participants" class="cards" style="display:none">
-  <div class="card">
-    <h2>Participantes</h2>
-    <div class="toolbar">
-      <input id="p-search" type="search" placeholder="Nome, cidade ou WhatsApp…"/>
-      <button class="btn" id="p-reload">Atualizar</button>
-      <button class="btn secondary" id="p-export">Exportar CSV</button>
-    </div>
+  <section id="tab-participants" class="cards" style="display:none">
+    <div class="card">
+      <h2>Participantes</h2>
+      <div class="toolbar">
+        <input id="p-search" type="search" placeholder="Nome, cidade ou WhatsApp…"/>
+        <button class="btn" id="p-reload">Atualizar</button>
+        <button class="btn secondary" id="p-export">Exportar CSV</button>
+      </div>
 
     <table id="p-table">
       <thead>
@@ -253,9 +253,9 @@
   // ====== HELPERS ======
   const $ = (id)=>document.getElementById(id);
   function csvDownload(filename, rows){
-    const esc = (v)=>('"'+String(v??'').replace(/"/g,'""')+'"');
-    const header = Object.keys(rows[0]||{}).map(esc).join(',');
-    const body = rows.map(r => Object.values(r).map(esc).join(',')).join('\n');
+    const escCSV = (v)=>('"'+String(v??'').replace(/"/g,'""')+'"');
+    const header = Object.keys(rows[0]||{}).map(escCSV).join(',');
+    const body = rows.map(r => Object.values(r).map(escCSV).join(',')).join('\n');
     const blob = new Blob([header+'\n'+body], {type:"text/csv;charset=utf-8;"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
@@ -310,33 +310,28 @@
   }
     
   window.AdminAPI = {
-    // perguntas (já existia)
+    // perguntas
     listQuestions : (filters={}) => callApi("admin-questions",  { action:"list",   filters }),
     saveQuestion  : (item)       => callApi("admin-questions",  { action:"upsert", item }),
     deleteQuestion: (id)         => callApi("admin-questions",  { action:"delete", id }),
 
-    // participantes (já existia)
+    // participantes
     listParticipants: (search="") => callApi("admin-participants",{ action:"list",  search }),
-
-    // NOVA rota: estatísticas em lote para participantes
     bulkStatsParticipants: (user_ids=[]) => callApi("admin-participants", { action:"stats_bulk", user_ids }),
     
-    // vouchers (já existia)
+    // vouchers
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
     redeemVoucher: (id) => callApi("admin-vouchers",{ action:"redeem", id }),
 
-    // ===== NOVOS (estatísticas em lote) =====
-    // para PARTICIPANTES: retorna { byId: { user_id: { downloaded:boolean, score:{correct,total} } } }
+    // estatísticas auxiliares
     participantsStats: (ids=[]) => callApi("admin-participants", { action:"stats_bulk", ids }),
-
-    // para PERGUNTAS: retorna { byId: { question_id: { acertos:number, erros:number } } }
     questionsStats: (ids=[]) => callApi("admin-questions", { action:"stats_bulk", ids }),
   };
 </script>
 <!-- === /Admin API Helper === -->
 
 <script>
-  // ====== DASHBOARD (totais + resiliência) ======
+  // ====== DASHBOARD ======
   async function loadDash(){
     try{
       const [qRes, pRes, vRes] = await Promise.allSettled([
@@ -387,11 +382,29 @@
   // ====== PERGUNTAS (CRUD + estatísticas) ======
   const qBody = $('q-table').querySelector('tbody');
   const qEmpty = $('q-empty');
-  $('q-new').onclick = ()=> openQ();
+  $('q-new').onclick = ()=> openQ(); // novo vazio
 
   $('q-search').addEventListener('input', debounce(loadQuestions, 300));
   $('q-filter-cat').addEventListener('change', loadQuestions);
   $('q-filter-dif').addEventListener('change', loadQuestions);
+
+  // delegação de eventos para Editar/Excluir
+  qBody.addEventListener('click', (ev)=>{
+    const btn = ev.target.closest('button[data-action]');
+    if(!btn) return;
+    const action = btn.dataset.action;
+    if(action === 'edit'){
+      try{
+        const data = JSON.parse(decodeURIComponent(btn.dataset.row||'%7B%7D'));
+        openQ(data);
+      }catch(e){
+        alert('Falha ao abrir edição da pergunta.');
+      }
+    }else if(action === 'delete'){
+      const id = btn.dataset.id;
+      if(id) deleteQ(id);
+    }
+  });
 
   async function loadQuestions(){
     qBody.innerHTML = '<tr><td colspan="12">Carregando…</td></tr>';
@@ -407,7 +420,7 @@
       fillSelectUnique(items, 'categoria', $('q-filter-cat'));
       fillSelectUnique(items, 'dificuldade', $('q-filter-dif'));
 
-      // pega estatísticas em lote (fallback se backend ainda não tiver)
+      // estatísticas em lote (se disponível)
       let statsById = {};
       try {
         const ids = items.map(r=>r.id);
@@ -417,10 +430,12 @@
 
       if(!items.length){ qBody.innerHTML=''; qEmpty.style.display='block'; return; }
       qEmpty.style.display='none';
+
       qBody.innerHTML = items.map(row => {
         const st = statsById[row.id] || {};
         const ac = (typeof st.acertos === 'number') ? st.acertos : '—';
         const er = (typeof st.erros   === 'number') ? st.erros   : '—';
+        const encoded = encodeURIComponent(JSON.stringify(row));
         return `
         <tr>
           <td>${esc(row.enunciado)}</td>
@@ -435,8 +450,8 @@
           <td>${ac}</td>
           <td>${er}</td>
           <td class="actions">
-            <button class="btn secondary" onclick='openQ(${JSON.stringify(JSON.stringify(row))})'>Editar</button>
-            <button class="btn secondary" onclick='deleteQ("${row.id}")'>Excluir</button>
+            <button class="btn secondary" data-action="edit" data-row="${encoded}">Editar</button>
+            <button class="btn secondary" data-action="delete" data-id="${row.id}">Excluir</button>
           </td>
         </tr>`;
       }).join('');
@@ -453,9 +468,9 @@
     if(current) selectEl.value = current;
   }
 
-  function openQ(serializedRow){
-    const dlg = $('dlg-q'); $('dlg-q-title').textContent = serializedRow ? 'Editar pergunta' : 'Nova pergunta';
-    const data = serializedRow ? JSON.parse(JSON.parse(serializedRow)) : {};
+  function openQ(data){
+    const dlg = $('dlg-q'); $('dlg-q-title').textContent = data && data.id ? 'Editar pergunta' : 'Nova pergunta';
+    data = data || {};
     $('f-enunciado').value = data.enunciado || '';
     $('f-a').value = data.alternativa_a || '';
     $('f-b').value = data.alternativa_b || '';
@@ -508,84 +523,82 @@
     }
   }
 
- // ====== PARTICIPANTES (lista + estatísticas) ======
-const pTable = $('p-table');
-const pBody  = pTable.tBodies[0] || pTable.appendChild(document.createElement('tbody'));
-const pEmpty = $('p-empty');
-$('p-reload').onclick = loadParticipants;
-$('p-export').onclick = exportParticipants;
-$('p-search').addEventListener('input', debounce(loadParticipants, 300));
+  // ====== PARTICIPANTES (lista + estatísticas) ======
+  const pTable = $('p-table');
+  const pBody  = pTable.tBodies[0] || pTable.appendChild(document.createElement('tbody'));
+  const pEmpty = $('p-empty');
+  $('p-reload').onclick = loadParticipants;
+  $('p-export').onclick = exportParticipants;
+  $('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
- async function loadParticipants(){
-  pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
-  try{
-    const search = $('p-search').value.trim() || undefined;
-    const { items } = await AdminAPI.listParticipants(search || "");
-    if(!items.length){ 
-      pBody.innerHTML=''; 
-      pEmpty.style.display='block'; 
-      pBody.dataset.rows = "[]";
-      return; 
-    }
-    pEmpty.style.display='none';
-
-    // ==== buscar stats em lote ====
-    const userIds = items.map(u=>u.id);
-    let statsMap = new Map();
+  async function loadParticipants(){
+    pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
     try{
-      const statsRes = await AdminAPI.bulkStatsParticipants(userIds);
-      // montar mapa user_id -> stats
-      statsMap = new Map((statsRes.items||[]).map(s => [s.user_id, s]));
-    }catch(e){
-      console.warn('Falha ao obter stats_bulk:', e);
+      const search = $('p-search').value.trim() || undefined;
+      const { items } = await AdminAPI.listParticipants(search || "");
+      if(!items.length){ 
+        pBody.innerHTML=''; 
+        pEmpty.style.display='block'; 
+        pBody.dataset.rows = "[]";
+        return; 
+      }
+      pEmpty.style.display='none';
+
+      // stats em lote
+      const userIds = items.map(u=>u.id);
+      let statsMap = new Map();
+      try{
+        const statsRes = await AdminAPI.bulkStatsParticipants(userIds);
+        statsMap = new Map((statsRes.items||[]).map(s => [s.user_id, s]));
+      }catch(e){
+        console.warn('Falha ao obter stats_bulk:', e);
+      }
+
+      pBody.innerHTML = items.map(u => {
+        const st = statsMap.get(u.id) || {};
+        const hasDownload = !!st.has_download;
+        const badge = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
+        const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
+        const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
+        const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
+        return `
+          <tr>
+            <td>${esc(u.nome)}</td>
+            <td>${esc(u.cidade)}</td>
+            <td>${esc(u.whatsapp)}</td>
+            <td>${formatDate(u.created_at)}</td>
+            <td>${badge}</td>
+            <td>${nota}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // export
+      const rowsForExport = items.map(u => {
+        const st = statsMap.get(u.id) || {};
+        return {
+          nome: u.nome,
+          cidade: u.cidade,
+          whatsapp: u.whatsapp,
+          created_at: u.created_at,
+          download: st.has_download ? 'Sim' : 'Não',
+          acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
+          total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
+        };
+      });
+      pBody.dataset.rows = JSON.stringify(rowsForExport);
+
+    }catch(err){
+      pBody.innerHTML = `<tr><td colspan="6" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+      pBody.dataset.rows = "[]";
     }
-
-    // render
-    pBody.innerHTML = items.map(u => {
-      const st = statsMap.get(u.id) || {};
-      const hasDownload = !!st.has_download;
-      const badge = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
-      const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
-      const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
-      const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
-      return `
-        <tr>
-          <td>${esc(u.nome)}</td>
-          <td>${esc(u.cidade)}</td>
-          <td>${esc(u.whatsapp)}</td>
-          <td>${formatDate(u.created_at)}</td>
-          <td>${badge}</td>
-          <td>${nota}</td>
-        </tr>
-      `;
-    }).join('');
-
-    // guardar dados para exportação (inclui stats)
-    const rowsForExport = items.map(u => {
-      const st = statsMap.get(u.id) || {};
-      return {
-        nome: u.nome,
-        cidade: u.cidade,
-        whatsapp: u.whatsapp,
-        created_at: u.created_at,
-        download: st.has_download ? 'Sim' : 'Não',
-        acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
-        total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
-      };
-    });
-    pBody.dataset.rows = JSON.stringify(rowsForExport);
-
-  }catch(err){
-    pBody.innerHTML = `<tr><td colspan="6" class="warn">Erro: ${esc(err.message)}</td></tr>`;
-    pBody.dataset.rows = "[]";
   }
-}
 
-function exportParticipants(){
-  const rows = JSON.parse(pBody.dataset.rows || "[]");
-  if(!rows.length){ alert("Nada para exportar."); return; }
-  csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows);
-}
+  function exportParticipants(){
+    const rows = JSON.parse(pBody.dataset.rows || "[]");
+    if(!rows.length){ alert("Nada para exportar."); return; }
+    csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  }
 
   // ====== VOUCHERS ======
   const vBody = $('v-table').querySelector('tbody');
