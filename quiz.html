@@ -552,23 +552,36 @@
   })();
 
   /* ===== RANKING ===== */
+ // ===== RANKING (usar RPC) =====
   async function updateRankingConsent(accepted){
     try{
+      if(!userId){ throw new Error("Sem userId para consentimento."); }
+
+      // chama a função SQL: set_ranking_consent(p_user_id uuid, p_accepted boolean)
       const { error } = await client
-        .from('users')
-        .update({
-          ranking_consent: !!accepted,
-          ranking_consent_at: new Date().toISOString()
-        })
-        .eq('id', userId);
+        .rpc('set_ranking_consent', {
+          p_user_id: userId,
+          p_accepted: !!accepted
+        });
+
       if(error) throw error;
       return true;
     }catch(e){
-      console.warn('Falha ao gravar consentimento de ranking:', e);
+      console.warn('Falha ao gravar consentimento via RPC:', e?.message || e);
+      // log opcional no client_logs, se quiser manter telemetria:
+      try{
+        await client.from('client_logs').insert({
+          user_id: userId || null,
+          message: 'ranking_consent RPC failed: ' + (e?.message || String(e)),
+          stack: null,
+          current_question: (typeof idxInBatch === 'number' ? idxInBatch+1 : null),
+          useragent: navigator.userAgent,
+          current_url: location.href
+        });
+      }catch(_){}
       return false;
     }
   }
-
   // Busca direto na view (sem Edge Function), ordenado por acertos de 1ª
   async function fetchLeaderboard(top = 50){
     try{
