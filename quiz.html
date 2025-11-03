@@ -76,7 +76,6 @@
     .code{font-size:clamp(20px,4vw,26px);letter-spacing:2px;font-weight:900;background:#fafafa;border:1px solid #e6e6e6;padding:8px 12px;border-radius:12px;display:inline-block;margin:6px 0 0}
     .note{color:var(--muted);font-size:14px;margin-top:6px}
 
-    /* Destaques de Nota */
     .score, .overall{
       max-width:640px;margin:8px auto 12px;padding:14px 16px;border-radius:16px;
       background:linear-gradient(180deg,#fff7da,#ffeaa3); border:1px solid #ead081;
@@ -85,7 +84,6 @@
     .score h3, .overall h3{margin:0 0 4px; font-size:clamp(18px,3.8vw,22px)}
     .score .big, .overall .big{font-weight:900;font-size:clamp(22px,5vw,34px);letter-spacing:.3px}
 
-    /* Parceiros */
     .partners{max-width:640px;margin:6px auto 0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
     .partners a{
       display:inline-block;padding:10px 12px;border-radius:12px;border:1px solid #e3d09a;
@@ -109,17 +107,8 @@
       .btn{padding:9px 12px}
     }
 
-    /* Painel de Debug (oculto) */
-    .dbg {
-      position: fixed; left: 8px; right: 8px; bottom: 8px;
-      background: #111; color: #fff; font: 12px/1.3 system-ui, sans-serif;
-      border-radius: 10px; padding: 8px 10px; opacity: .9; z-index: 9999;
-      pointer-events: none;
-      display: none !important;
-    }
-    .dbg b { color: #ffe082; }
-    .dbg .bad { color: #ff8a80; }
-    .dbg .ok  { color: #a5d6a7; }
+    .dbg{position:fixed;left:8px;right:8px;bottom:8px;background:#111;color:#fff;font:12px/1.3 system-ui,sans-serif;border-radius:10px;padding:8px 10px;opacity:.9;z-index:9999;pointer-events:none;display:none!important}
+    .dbg b{color:#ffe082}.dbg .bad{color:#ff8a80}.dbg .ok{color:#a5d6a7}
   </style>
 </head>
 <body>
@@ -153,7 +142,7 @@
       <div id="finalView" class="final" style="display:none">
         <div class="score" id="scoreBox" aria-live="polite">
           <h3>Seu desempenho neste lote</h3>
-          <div class="big" id="scoreText">0 / 20</div>
+          <div class="big" id="scoreText">0 / 10</div>
           <div class="note" id="scoreHint">Contamos apenas os acertos de primeira.</div>
         </div>
 
@@ -164,17 +153,17 @@
         </div>
 
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
-        <p id="finalSubtitle">Apresente o seu código no parceiro para retirar o livro.</p>
+        <p id="finalSubtitle">Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.</p>
 
         <div class="partners" id="partnersRow" aria-label="Parceiros para retirada"></div>
 
         <div id="voucherBox" class="voucher">
           <h3>Seu código de retirada</h3>
           <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
-          <div class="note" id="voucherValidity">Válido até —</div>
+          <div class="note" id="voucherValidity">Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.</div>
         </div>
 
-        <div class="btn-row" id="downloadRow">
+        <div class="btn-row" id="downloadRow" style="display:none">
           <a id="btnDownload" class="btn" href="#" target="_blank" rel="noopener">Baixar o livro</a>
           <button id="btnCopy" class="btn secondary" type="button">Copiar código</button>
         </div>
@@ -198,7 +187,6 @@
   </footer>
 </div>
 
-<!-- Painel de debug (permanece no DOM, mas oculto) -->
 <div id="__dbg" class="dbg"></div>
 
 <script>
@@ -213,14 +201,12 @@
     window.addEventListener('pageshow', (e) => { if (e.persisted) location.replace('index.html'); });
   })();
 
-  // ======= HARDENING (opt-in via ?harden=1) =======
-  const HARDENING = new URLSearchParams(location.search).has('harden');
-
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
 
-  const BATCH_SIZE = 20;
+  /* (3) reduzir lotes para 10 */
+  const BATCH_SIZE = 10;
 
   const PARTNERS = [
     { name: "Mina Café & Vinho - Praça do Congresso (Centro)", url: "https://www.instagram.com/minacafevinho/" },
@@ -286,106 +272,57 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  /* ===== Debug: painel OFF, logs ON (mantido como estava) ===== */
+  /* ===== Debug ===== */
   const DEBUG_PANEL = false;
   const DEBUG_LOGS  = true;
   const dbgEl = document.getElementById('__dbg');
   if (dbgEl) dbgEl.style.display = 'none';
   function dbgShow(msg){ if(!DEBUG_PANEL || !dbgEl) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
-  async function dbgLog(where, extra={}){
-    if(!DEBUG_LOGS) return;
-    try{
-      await client.from('client_logs').insert({
-        user_id: userId || null,
-        message: `[${where}]`,
-        stack: JSON.stringify(extra),
-        current_question: idxInBatch + 1,
-        useragent: navigator.userAgent,
-        current_url: window.location.href
-      });
-    }catch(_){}
-  }
-  function dbgState(extraMsg=''){
-    const q = batch[idxInBatch] || {};
-    const msg = [
-      `<b>estado</b> idx=${idxInBatch}/${Math.max(0,batch.length-1)}`,
-      `qid=${q.id ?? '—'}`,
-      `correta=<b>${currentCorrectKey||'?'}</b>`,
-      `tentativas=${currentAttempts}`,
-      `globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,
-      extraMsg && `<span class="bad">${extraMsg}</span>`
-    ].filter(Boolean).join(' • ');
-    dbgShow(msg);
-  }
+  async function dbgLog(where, extra={}){ if(!DEBUG_LOGS) return; try{ await client.from('client_logs').insert({ user_id: userId||null, message:`[${where}]`, stack: JSON.stringify(extra), current_question: idxInBatch+1, useragent:navigator.userAgent, current_url:location.href }); }catch(_){} }
+  function dbgState(extraMsg=''){ const q=batch[idxInBatch]||{}; const msg=[`<b>estado</b> idx=${idxInBatch}/${Math.max(0,batch.length-1)}`,`qid=${q.id??'—'}`,`correta=<b>${currentCorrectKey||'?'}</b>`,`tentativas=${currentAttempts}`,`globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,extraMsg&&`<span class="bad">${extraMsg}</span>`].filter(Boolean).join(' • '); dbgShow(msg); }
 
   async function withTimeout(promise, ms, label='op'){
     let timer;
     const timeout = new Promise((_, rej)=>{ timer = setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)), ms); });
-    try{
-      const res = await Promise.race([promise, timeout]);
-      clearTimeout(timer);
-      return res;
-    }catch(err){
-      clearTimeout(timer);
-      try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent: navigator.userAgent, current_url: window.location.href }); }catch(_){}
-      throw err;
-    }
-  }
-
-  // ===== Helper de retry (usado só quando HARDENING = true) =====
-  async function withRetry(fn, { tries=5, base=200 } = {}){
-    let lastErr;
-    for (let i=0;i<tries;i++){
-      try { return await fn(); }
-      catch(e){
-        lastErr = e;
-        const status = e?.status || 0;
-        const msg = (e?.message||'').toLowerCase();
-        const retryable = status===0 || status===429 || (status>=500 && status<600) || msg.includes('timeout');
-        if (!retryable || i===tries-1) break;
-        await new Promise(r => setTimeout(r, base * Math.pow(2, i)));
-      }
-    }
-    throw lastErr;
+    try{ const res = await Promise.race([promise, timeout]); clearTimeout(timer); return res; }
+    catch(err){ clearTimeout(timer); try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent: navigator.userAgent, current_url: location.href }); }catch(_){} throw err; }
   }
 
   async function insertSubmission({ user_id, question_id, first_try_correct }){
     try{
-      const task = async () => {
-        const { error, status } = await withTimeout(
-          client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
-          5000,'insertSubmission'
-        );
-        if(error){ error.status = status || 0; throw error; }
-      };
-      if (HARDENING) await withRetry(task, { tries:5, base:200 }); else await task();
+      const { error } = await withTimeout(
+        client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
+        5000,'insertSubmission'
+      );
+      if(error) throw error;
     }catch(e){ console.error('Erro ao gravar submission:', e); }
   }
 
+  /* (1) prazo fixo 30/11 para todos */
+  function getFixedDeadline(){
+    const now = new Date();
+    const y = now.getFullYear();
+    // 30/11 às 23:59:59 (horário local)
+    return new Date(y, 10, 30, 23, 59, 59);
+  }
+
   async function ensureVoucher(user_id){
-    let code = formatVoucherCode(), issuedAt = new Date(), expiresAt = addDays(issuedAt,14);
+    let code = formatVoucherCode();
+    const issuedAt = new Date();
+    const expiresAt = getFixedDeadline();
     for(let i=0;i<5;i++){
-      try{
-        const task = async () => {
-          const { error, status } = await withTimeout(
-            client.from('vouchers').insert({
-              user_id, code, status:'pendente',
-              issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
-              partner:'Parceiros do projeto'
-            }),
-            6000,'ensureVoucher.insert'
-          );
-          if(error){ error.status = status || 0; throw error; }
-        };
-        if (HARDENING) await withRetry(task, { tries:4, base:250 }); else await task();
-        return { code, issuedAt, expiresAt };
-      }catch(e){
-        const msg = (e?.message||'').toLowerCase();
-        if (msg.includes('duplicate')) { code = formatVoucherCode(); continue; }
-        console.warn('Falha ao criar voucher, tentativa falhou:', e?.message || e);
-      }
+      const { error } = await withTimeout(
+        client.from('vouchers').insert({
+          user_id, code, status:'pendente',
+          issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
+          partner:'Parceiros do projeto'
+        }),
+        6000,'ensureVoucher.insert'
+      ).catch(e=>({ error:e }));
+      if(!error) return { code, issuedAt, expiresAt };
+      if(String((error.message||'') + '').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
+      console.warn('Falha ao criar voucher, fallback local.');
     }
-    // fallback local
     return { code, issuedAt, expiresAt };
   }
 
@@ -397,34 +334,11 @@
     els.progressBar.style.width = `${pct}%`;
   }
 
-  function clearOptStates(){
-    [...els.options.querySelectorAll('.opt')].forEach(el=>{
-      el.classList.remove('selected','correct','wrong','disabled');
-      el.removeAttribute('aria-pressed');
-      el.removeAttribute('disabled');
-    });
-  }
-  function disableOptions(){
-    [...els.options.querySelectorAll('.opt')].forEach(el=>{
-      el.classList.add('disabled');
-      el.setAttribute('disabled','true');
-      el.setAttribute('aria-disabled','true');
-    });
-  }
-  function enableOptions(){
-    [...els.options.querySelectorAll('.opt')].forEach(el=>{
-      el.classList.remove('disabled');
-      el.removeAttribute('disabled');
-      el.removeAttribute('aria-disabled');
-    });
-  }
+  function clearOptStates(){ [...els.options.querySelectorAll('.opt')].forEach(el=>{ el.classList.remove('selected','correct','wrong','disabled'); el.removeAttribute('aria-pressed'); el.removeAttribute('disabled'); }); }
+  function disableOptions(){ [...els.options.querySelectorAll('.opt')].forEach(el=>{ el.classList.add('disabled'); el.setAttribute('disabled','true'); el.setAttribute('aria-disabled','true'); }); }
+  function enableOptions(){ [...els.options.querySelectorAll('.opt')].forEach(el=>{ el.classList.remove('disabled'); el.removeAttribute('disabled'); el.removeAttribute('aria-disabled'); }); }
 
-  function hardResetLocks(){
-    locked = false;
-    handlingClick = false;
-    enableOptions();
-    clearOptStates();
-  }
+  function hardResetLocks(){ locked=false; handlingClick=false; enableOptions(); clearOptStates(); }
 
   function renderQuestion(){
     try{
@@ -571,13 +485,11 @@
 
   async function logDownload({ user_id, url }) {
     try {
-      const task = async () => {
-        const { error, status } = await client.from('downloads').insert({ user_id, file: url });
-        if (error){ error.status = status || 0; throw error; }
-      };
-      if (HARDENING) await withRetry(task, { tries:4, base:200 }); else await task();
+      const payload = { user_id, file: url };
+      const { error } = await client.from('downloads').insert(payload);
+      if (error) console.warn('downloads.insert falhou:', error.message);
     } catch (e) {
-      console.warn('downloads.insert falhou:', e?.message || e);
+      console.warn('downloads.insert exception:', e);
     }
   }
   (function wireDownloadLogging(){
@@ -606,6 +518,12 @@
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
       const primeiroLote = !window.__voucherIssued;
+      const totalRespondidas = askedIds.size;
+      const totalAtivas = allQuestions.length;
+      const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
+
+      // frase pedida em (2)
+      const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
 
       if (primeiroLote) {
         renderPartners();
@@ -613,16 +531,18 @@
 
         let voucher;
         try { voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher'); }
-        catch (e) { voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: addDays(new Date(),14) }; }
+        catch (e) { voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: getFixedDeadline() }; }
 
         els.voucherCode.textContent = voucher.code;
-        els.voucherValidity.textContent = `Válido até ${new Date(voucher.expiresAt).toLocaleDateString('pt-BR')}`;
+        els.voucherValidity.textContent = instruction;
         window.__voucherIssued = true;
 
         els.voucherBox.style.display = 'block';
-        els.downloadRow.style.display = 'flex';
+        // (4) não mostrar download neste momento
+        els.downloadRow.style.display = 'none';
+
         els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
-        els.finalSubtitle.textContent = 'Apresente o seu código no parceiro para retirar o livro.';
+        els.finalSubtitle.textContent = instruction;
       } else {
         els.partnersRow.style.display = 'none';
         els.voucherBox.style.display = 'none';
@@ -631,33 +551,24 @@
         els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
       }
 
-      const totalRespondidas = askedIds.size;
-      const totalAtivas = allQuestions.length;
       els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
-
-      const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
 
       els.continueRow.style.display = 'flex';
       els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
 
       if (remaining === 0) {
+        // liberamos o download SOMENTE ao finalizar todas as perguntas
+        if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
+          els.btnDownload.href = PDF_URL;
+          els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
+          els.downloadRow.style.display = 'flex';
+        }
         els.finalTitle.textContent = 'Você concluiu todas as perguntas! 🎉';
-        els.finalSubtitle.textContent = 'Obrigado por participar. Compartilhe e visite o HN Notícias.';
+        els.finalSubtitle.textContent = instruction;
         els.overallText.textContent = `${answeredTotal} / ${totalConcluidas}`;
         els.overallBox.style.display = 'block';
       } else {
         els.overallBox.style.display = 'none';
-      }
-
-      if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
-        els.btnDownload.href = PDF_URL;
-        els.btnDownload.removeAttribute('disabled');
-        els.btnDownload.setAttribute('aria-disabled', 'false');
-        els.btnDownload.setAttribute('rel', 'noopener');
-        els.btnDownload.setAttribute('download', 'livro_centenario.pdf');
-        els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
-      } else {
-        els.btnDownload.href = '#';
       }
 
       els.progressBar.style.width = '100%';
@@ -699,7 +610,7 @@
     else { renderQuestion(); }
   });
 
-  els.btnCopy.addEventListener('click',async()=>{
+  els.btnCopy?.addEventListener('click',async()=>{
     const code = els.voucherCode.textContent.trim();
     try{ await navigator.clipboard.writeText(code); els.btnCopy.textContent='Copiado!'; await wait(1000); }
     catch(_){ els.btnCopy.textContent='Selecione e copie'; await wait(1000); }
@@ -716,11 +627,9 @@
       const message = (err && err.message) ? err.message : String(err);
       const stack   = (err && err.stack)   ? err.stack   : null;
       await client.from('client_logs').insert({
-        user_id: userId || null,
-        message, stack,
+        user_id: userId || null, message, stack,
         current_question: idxInBatch + 1,
-        useragent: navigator.userAgent,
-        current_url: window.location.href
+        useragent: navigator.userAgent, current_url: location.href
       });
     } catch (logErr) {
       console.warn("Falha ao registrar erro:", logErr);
