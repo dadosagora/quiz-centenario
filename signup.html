@@ -94,7 +94,7 @@
         </div>
         <div class="field">
           <label><span>WhatsApp</span>
-            <input id="whatsapp" type="tel" inputmode="tel" required placeholder="(48) 99999-0000" maxlength="16">
+            <input id="whatsapp" type="tel" inputmode="tel" autocomplete="tel" required placeholder="(48) 99999-0000" maxlength="16">
           </label>
         </div>
 
@@ -137,13 +137,110 @@
 
   function openPolicy(){ document.getElementById('policy').showModal(); }
 
-  // máscara whatsapp
+  /* ====== MÁSCARA DE WHATSAPP COM CONTROLE DE CURSOR ======
+     - Permite digitar/apagar em qualquer ponto.
+     - Backspace “pula” os literais ( ) e - automaticamente.
+     - Limita a 11 dígitos (DD + 9 números). */
   const wa = document.getElementById('whatsapp');
+
+  function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
+  function formatBR(d){
+    d = (d||'').slice(0,11);
+    if(!d) return '';
+    if(d.length <= 2) return `(${d}`;
+    if(d.length <= 7) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+    // quando >= 8, insere hífen antes dos últimos 4
+    const base = `(${d.slice(0,2)}) ${d.slice(2, d.length-4)}-${d.slice(-4)}`;
+    return base;
+  }
+  function countDigitsUpTo(str, pos){
+    let c = 0;
+    for(let i=0;i<Math.min(pos, str.length);i++){
+      if(/\d/.test(str[i])) c++;
+    }
+    return c;
+  }
+  function caretFromDigitIndex(formatted, digitIdx){
+    // retorna a posição de caret no texto formatado logo APÓS o dígito de índice digitIdx
+    if(digitIdx <= 0) {
+      // início após "("
+      for(let i=0;i<formatted.length;i++){
+        if(/\d/.test(formatted[i])) return i;
+      }
+      return formatted.length;
+    }
+    let seen = 0;
+    for(let i=0;i<formatted.length;i++){
+      if(/\d/.test(formatted[i])){
+        seen++;
+        if(seen === digitIdx) {
+          // caret após esse dígito, mas se próximo é literal, coloca exatamente depois
+          return i+1;
+        }
+      }
+    }
+    return formatted.length;
+  }
+
+  let lastVal = '';
+  let lastPos = 0;
+  let lastInputType = '';
+
+  wa.addEventListener('beforeinput', (e) => {
+    lastInputType = e.inputType || '';
+    lastVal = wa.value;
+    // selectionStart pode ser null em alguns navegadores; fallback
+    lastPos = (wa.selectionStart != null) ? wa.selectionStart : (wa.value||'').length;
+  });
+
   wa.addEventListener('input', () => {
-    let v = wa.value.replace(/\D/g,'').slice(0,11);
-    if(v.length>=2) v = '('+v.slice(0,2)+') '+v.slice(2);
-    if(v.length>=10) v = v.slice(0,10)+'-'+v.slice(10);
-    wa.value = v;
+    const prev = lastVal;
+    const prevPos = lastPos;
+    const prevDigitIdx = countDigitsUpTo(prev, prevPos);
+
+    // dígitos atuais (sem máscara)
+    let digits = onlyDigits(wa.value);
+
+    // Se usuário pressionou backspace em cima de um literal, simulamos remoção do dígito anterior
+    let targetDigitIdx = prevDigitIdx;
+    if (lastInputType === 'deleteContentBackward' && targetDigitIdx > 0) {
+      // Se na string anterior o caractere antes do cursor não era dígito, decrementar índice
+      const chBefore = prev[prevPos-1];
+      if (chBefore && !/\d/.test(chBefore)) {
+        targetDigitIdx -= 1;
+        // também remover 1 dígito da posição correspondente
+        // (remoção já refletirá ao reformatar)
+        // Ex.: se digitIdx era 5, queremos que o 5º dígito "desapareça"
+        const arr = digits.split('');
+        if (arr.length >= targetDigitIdx && targetDigitIdx > 0) {
+          // remove o dígito imediatamente anterior ao caret lógico
+          arr.splice(targetDigitIdx-1, 1);
+          digits = arr.join('');
+        }
+      }
+    }
+
+    // Limita a 11 dígitos e formata
+    digits = digits.slice(0,11);
+    const formatted = formatBR(digits);
+    wa.value = formatted;
+
+    // Reposiciona o caret com base no índice lógico de dígitos
+    // (se o usuário digitou algo, o índice alvo é prevDigitIdx+1; se apagou, já ajustamos acima)
+    let desiredIdx = targetDigitIdx;
+    if (lastInputType === 'insertText' || lastInputType === 'insertFromPaste') {
+      desiredIdx = prevDigitIdx + 1;
+    }
+    if (desiredIdx < 0) desiredIdx = 0;
+    if (desiredIdx > digits.length) desiredIdx = digits.length;
+
+    const newPos = caretFromDigitIndex(formatted, desiredIdx);
+    try { wa.setSelectionRange(newPos, newPos); } catch(_) {}
+  });
+
+  // Normaliza ao sair do campo
+  wa.addEventListener('blur', () => {
+    wa.value = formatBR(onlyDigits(wa.value));
   });
 
   function uuidv4(){
@@ -168,23 +265,23 @@
 
     const nome = document.getElementById('nome').value.trim();
     const cidade = document.getElementById('cidade').value.trim();
-    const whatsapp = document.getElementById('whatsapp').value.trim();
+    const whatsappMasked = document.getElementById('whatsapp').value.trim();
     const consent = document.getElementById('consent').checked;
 
-    if(!nome || !cidade || !whatsapp || !consent){
+    if(!nome || !cidade || !whatsappMasked || !consent){
       alert('Preencha todos os campos e aceite a Política de Privacidade.');
       btn.disabled = false; 
       return false;
     }
 
-    const whatsapp_digits = whatsapp.replace(/\D/g,'');
+    const whatsapp = whatsappMasked.replace(/\D/g,''); // só dígitos
     const id = uuidv4();
     const created_at = new Date().toISOString();
 
     try{
       // 1) PRÉ-CHECAGEM: já existe esse WhatsApp?
       const q = new URL(PROJECT_URL + "/rest/v1/users");
-      q.searchParams.set("whatsapp", "eq."+whatsapp_digits);
+      q.searchParams.set("whatsapp", "eq."+whatsapp);
       q.searchParams.set("select", "id");
       q.searchParams.set("limit", "1");
       const existsRes = await fetch(q.toString(), {
@@ -211,7 +308,7 @@
           "apikey":ANON_KEY,"Authorization":"Bearer "+ANON_KEY,
           "Content-Type":"application/json","Prefer":"return=minimal"
         },
-        body: JSON.stringify({ id, nome, cidade, whatsapp: whatsapp_digits, consent, created_at })
+        body: JSON.stringify({ id, nome, cidade, whatsapp, consent, created_at })
       });
 
       if(!res.ok){
