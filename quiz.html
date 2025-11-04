@@ -218,7 +218,7 @@
           <div id="lbMsg" class="note" style="margin-top:6px"></div>
         </div>
 
-        <!-- Tabela de Ranking (apenas Pos. | Nome | Acertos 1ª) -->
+        <!-- Tabela de Ranking -->
         <div id="leaderboard" style="display:none; max-width:760px; margin:14px auto 0; padding:0">
           <h3 style="margin:0 0 8px; font-size:clamp(18px,3.8vw,22px)">Ranking do Quiz</h3>
           <div style="overflow:auto">
@@ -572,21 +572,25 @@
       console.warn('downloads.insert exception:', e);
     }
   }
+
+  /* ====== DOWNLOAD EM NOVA GUIA SEM REDIRECIONAR A ATUAL ====== */
   (function wireDownloadLogging(){
     const a = document.getElementById('btnDownload') || document.getElementById('btndownload');
     if (!a) return;
-    // saída intencional (não mostrar prompt)
-    markSafeNavigation(a);
+    markSafeNavigation(a); // não mostra o prompt de saída
     a.addEventListener('click', async (ev) => {
+      ev.preventDefault(); // impede navegação na guia atual
       const href = a.getAttribute('href') || '';
       if (!/^https?:\/\//i.test(href)) return;
-      const w = window.open(href, '_blank', 'noopener');
+
+      // abre em nova guia SEM mexer na guia atual
+      window.open(href, '_blank', 'noopener');
+
+      // registra o download (não bloqueante para o usuário)
       try {
         const user_id = localStorage.getItem('hn_user_id') || null;
         await logDownload({ user_id, url: href });
       } catch(_) {}
-      if (!w || w.closed) window.location.href = href;
-      ev.preventDefault();
     }, { passive:false });
   })();
 
