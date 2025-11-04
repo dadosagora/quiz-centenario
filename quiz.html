@@ -181,7 +181,7 @@
         </div>
 
         <div class="overall" id="overallBox" style="display:none" aria-live="polite">
-          <h3>Placar geral</h3>
+          <h3>Acerto Total</h3>
           <div class="big" id="overallText">0 / 0</div>
           <div class="note">Soma de todos os lotes concluídos.</div>
         </div>
@@ -776,7 +776,7 @@
       els.progressBar.style.width = '100%';
 
       const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
-      const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas de primeira no Quiz do Centenário de Criciúma! 🟨🖤 Tenta bater minha marca: ${shareLink}`;
+      const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
       els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
 
       dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued, remaining });
