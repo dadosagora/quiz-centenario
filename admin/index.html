@@ -210,8 +210,10 @@
   <img class="banner" src="../assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos – banner"/>
 </footer>
 
+<!-- Supabase client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<!-- MODAL – Nova/Editar pergunta -->
 <dialog id="dlg-q">
   <div class="modal-h" id="dlg-q-title">Nova pergunta</div>
   <div class="modal-b">
@@ -430,7 +432,7 @@
     }
   }
 
-  // ====== PERGUNTAS (agora lendo da VIEW) ======
+  // ====== PERGUNTAS (lendo da VIEW question_stats_v) ======
   const qBody = $('q-table').querySelector('tbody');
   const qEmpty = $('q-empty');
   $('q-new').onclick = ()=> openQ();
@@ -454,56 +456,51 @@
   });
 
   async function fetchQuestionStatsFromView(ids){
-  const out = new Map();
-  if (!ids.length) return out;
-  const { data, error } = await sb
-    .from('question_stats_v')
-    .select('id, acertos, erros, total')
-    .in('id', ids.map(String));
+    const out = new Map();
+    if(!ids || !ids.length) return out;
 
-  if (!error && Array.isArray(data)) {
-    data.forEach(r => {
-      out.set(String(r.id), {
-        acertos: Number(r.acertos) || 0,
-        erros:   Number(r.erros)   || 0,
-        total:   Number(r.total)   || 0
-      });
-    });
+    const idList = ids.map(String);
+    const chunkSize = 200;
+    for(let i=0;i<idList.length;i+=chunkSize){
+      const slice = idList.slice(i, i+chunkSize);
+      const { data, error } = await sb
+        .from('question_stats_v')
+        .select('id, acertos, erros, total')
+        .in('id', slice);
+
+      if (!error && Array.isArray(data)){
+        data.forEach(r=>{
+          out.set(String(r.id), {
+            acertos: Number(r.acertos)||0,
+            erros:   Number(r.erros)||0,
+            total:   Number(r.total)||0
+          });
+        });
+      }
+    }
+    console.debug('[question_stats_v] fetched', out.size, 'rows');
+    return out;
   }
-  return out;
-}
 
   async function loadQuestions(){
     qBody.innerHTML = '<tr><td colspan="10">Carregando…</td></tr>';
     try{
       const filters = { search: $('q-search').value.trim() || undefined };
       const { items } = await AdminAPI.listQuestions(filters);
-      if(!items.length){ qBody.innerHTML=''; qEmpty.style.display='block'; return; }
-      qEmpty.style.display='none';
 
-      // 1º tenta pela VIEW; se falhar, cai no fallback das Edge Functions
-      let statsById = new Map();
-      try{
-        statsById = await fetchQuestionStatsFromView(items.map(r=>r.id));
-      }catch(_){ statsById = new Map(); }
-
-      // Fallback (mantém compatibilidade)
-      if (statsById.size === 0){
-        try {
-          const ids = items.map(r => String(r.id));
-const statsByIdMap = await fetchQuestionStatsFromView(ids);
-const statsById = Object.fromEntries(statsByIdMap); // para manter o restante do código igual
-          statsById = new Map(Object.entries(byId).map(([id, s])=>{
-            const ac = Number(s.acertos ?? s.first_try_hits ?? 0);
-            const tot = Number(s.total ?? s.total_answered ?? (ac + Number(s.erros ?? 0)));
-            const er = Number(s.erros ?? (tot - ac));
-            return [id, { acertos: Math.max(ac,0), erros: Math.max(er,0) }];
-          }));
-        }catch(_){}
+      if(!items || !items.length){
+        qBody.innerHTML = '';
+        qEmpty.style.display = 'block';
+        return;
       }
+      qEmpty.style.display = 'none';
+
+      // Stats reais via VIEW pública
+      const ids = items.map(r=>r.id);
+      const statsMap = await fetchQuestionStatsFromView(ids);
 
       qBody.innerHTML = items.map(row => {
-        const st = statsById.get(row.id) || { acertos:0, erros:0 };
+        const st = statsMap.get(String(row.id)) || { acertos:0, erros:0, total:0 };
         const encoded = encodeURIComponent(JSON.stringify(row));
         return `
         <tr>
@@ -661,6 +658,12 @@ const statsById = Object.fromEntries(statsByIdMap); // para manter o restante do
     }
   }
 
+  function exportParticipants(){
+    const rows = JSON.parse(pBody.dataset.rows || "[]");
+    if(!rows.length){ alert("Nada para exportar."); return; }
+    csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  }
+
   // ====== VOUCHERS ======
   const vBody = $('v-table').querySelector('tbody');
   const vEmpty = $('v-empty');
@@ -694,7 +697,7 @@ const statsById = Object.fromEntries(statsByIdMap); // para manter o restante do
         `;
       }).join('');
     }catch(err){
-      vBody.innerHTML = `<tr><td colspan="8" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+      vBody.innerHTML = `<tr><td colspan="8" class="warn">Erro ao carregar vouchers: ${esc(err.message)}</td></tr>`;
     }
   }
 
