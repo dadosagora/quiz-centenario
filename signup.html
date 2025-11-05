@@ -15,6 +15,8 @@
   </script>
   <!-- fim Google tag -->
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
     :root{
       --bg:#fff; --text:#111; --muted:#555;
@@ -25,7 +27,6 @@
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .wrap{min-height:100dvh;display:flex;flex-direction:column}
 
-    /* Header unificado (logo grande + título) */
     header{border-bottom:1px solid var(--border);background:#fff}
     .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 8px}
     .logo-wrap{display:flex;justify-content:center}
@@ -55,7 +56,6 @@
     .footer-inner img{max-width:100%;height:auto}
     .link{color:var(--gold-2);text-decoration:underline;cursor:pointer}
 
-    /* Compactar em telas baixas p/ evitar scroll */
     @media (max-height:760px){
       .head{padding:8px 0 4px}
       .logo-wrap img{max-width:360px}
@@ -132,136 +132,134 @@
 </dialog>
 
 <script>
-  const PROJECT_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
-  const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+  /* ===== Config ===== */
+  const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
+
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  const LS_KEYS = {
+    queue: 'hn_signup_queue',
+    token: 'hn_signup_token',
+  };
 
   function openPolicy(){ document.getElementById('policy').showModal(); }
 
-  /* ====== MÁSCARA DE WHATSAPP COM CONTROLE DE CURSOR ======
-     - Permite digitar/apagar em qualquer ponto.
-     - Backspace “pula” os literais ( ) e - automaticamente.
-     - Limita a 11 dígitos (DD + 9 números). */
+  /* ====== MÁSCARA DE WHATSAPP COM CONTROLE DE CURSOR ====== */
   const wa = document.getElementById('whatsapp');
-
   function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
   function formatBR(d){
     d = (d||'').slice(0,11);
     if(!d) return '';
     if(d.length <= 2) return `(${d}`;
     if(d.length <= 7) return `(${d.slice(0,2)}) ${d.slice(2)}`;
-    // quando >= 8, insere hífen antes dos últimos 4
-    const base = `(${d.slice(0,2)}) ${d.slice(2, d.length-4)}-${d.slice(-4)}`;
-    return base;
+    return `(${d.slice(0,2)}) ${d.slice(2, d.length-4)}-${d.slice(-4)}`;
   }
-  function countDigitsUpTo(str, pos){
-    let c = 0;
-    for(let i=0;i<Math.min(pos, str.length);i++){
-      if(/\d/.test(str[i])) c++;
-    }
-    return c;
-  }
-  function caretFromDigitIndex(formatted, digitIdx){
-    // retorna a posição de caret no texto formatado logo APÓS o dígito de índice digitIdx
-    if(digitIdx <= 0) {
-      // início após "("
-      for(let i=0;i<formatted.length;i++){
-        if(/\d/.test(formatted[i])) return i;
-      }
-      return formatted.length;
-    }
-    let seen = 0;
-    for(let i=0;i<formatted.length;i++){
-      if(/\d/.test(formatted[i])){
-        seen++;
-        if(seen === digitIdx) {
-          // caret após esse dígito, mas se próximo é literal, coloca exatamente depois
-          return i+1;
-        }
-      }
-    }
+  function countDigitsUpTo(str, pos){ let c=0; for(let i=0;i<Math.min(pos, str.length);i++){ if(/\d/.test(str[i])) c++; } return c; }
+  function caretFromDigitIndex(formatted, idx){
+    if(idx <= 0){ for(let i=0;i<formatted.length;i++){ if(/\d/.test(formatted[i])) return i; } return formatted.length; }
+    let seen=0;
+    for(let i=0;i<formatted.length;i++){ if(/\d/.test(formatted[i])){ seen++; if(seen===idx) return i+1; } }
     return formatted.length;
   }
-
-  let lastVal = '';
-  let lastPos = 0;
-  let lastInputType = '';
-
-  wa.addEventListener('beforeinput', (e) => {
-    lastInputType = e.inputType || '';
-    lastVal = wa.value;
-    // selectionStart pode ser null em alguns navegadores; fallback
-    lastPos = (wa.selectionStart != null) ? wa.selectionStart : (wa.value||'').length;
-  });
-
-  wa.addEventListener('input', () => {
-    const prev = lastVal;
-    const prevPos = lastPos;
-    const prevDigitIdx = countDigitsUpTo(prev, prevPos);
-
-    // dígitos atuais (sem máscara)
+  let lastVal='', lastPos=0, lastInputType='';
+  wa.addEventListener('beforeinput', (e)=>{ lastInputType=e.inputType||''; lastVal=wa.value; lastPos=(wa.selectionStart!=null?wa.selectionStart:(wa.value||'').length); });
+  wa.addEventListener('input', ()=>{
+    const prev=lastVal, prevPos=lastPos, prevDigitIdx=countDigitsUpTo(prev, prevPos);
     let digits = onlyDigits(wa.value);
-
-    // Se usuário pressionou backspace em cima de um literal, simulamos remoção do dígito anterior
     let targetDigitIdx = prevDigitIdx;
-    if (lastInputType === 'deleteContentBackward' && targetDigitIdx > 0) {
-      // Se na string anterior o caractere antes do cursor não era dígito, decrementar índice
+    if(lastInputType==='deleteContentBackward' && targetDigitIdx>0){
       const chBefore = prev[prevPos-1];
-      if (chBefore && !/\d/.test(chBefore)) {
+      if(chBefore && !/\d/.test(chBefore)){
         targetDigitIdx -= 1;
-        // também remover 1 dígito da posição correspondente
-        // (remoção já refletirá ao reformatar)
-        // Ex.: se digitIdx era 5, queremos que o 5º dígito "desapareça"
         const arr = digits.split('');
-        if (arr.length >= targetDigitIdx && targetDigitIdx > 0) {
-          // remove o dígito imediatamente anterior ao caret lógico
-          arr.splice(targetDigitIdx-1, 1);
-          digits = arr.join('');
-        }
+        if(arr.length >= targetDigitIdx && targetDigitIdx>0){ arr.splice(targetDigitIdx-1,1); digits = arr.join(''); }
       }
     }
-
-    // Limita a 11 dígitos e formata
     digits = digits.slice(0,11);
     const formatted = formatBR(digits);
     wa.value = formatted;
-
-    // Reposiciona o caret com base no índice lógico de dígitos
-    // (se o usuário digitou algo, o índice alvo é prevDigitIdx+1; se apagou, já ajustamos acima)
     let desiredIdx = targetDigitIdx;
-    if (lastInputType === 'insertText' || lastInputType === 'insertFromPaste') {
-      desiredIdx = prevDigitIdx + 1;
-    }
-    if (desiredIdx < 0) desiredIdx = 0;
-    if (desiredIdx > digits.length) desiredIdx = digits.length;
-
+    if(lastInputType==='insertText' || lastInputType==='insertFromPaste'){ desiredIdx = prevDigitIdx+1; }
+    if(desiredIdx<0) desiredIdx=0; if(desiredIdx>digits.length) desiredIdx=digits.length;
     const newPos = caretFromDigitIndex(formatted, desiredIdx);
-    try { wa.setSelectionRange(newPos, newPos); } catch(_) {}
+    try{ wa.setSelectionRange(newPos,newPos); }catch(_){}
   });
+  wa.addEventListener('blur', ()=>{ wa.value = formatBR(onlyDigits(wa.value)); });
 
-  // Normaliza ao sair do campo
-  wa.addEventListener('blur', () => {
-    wa.value = formatBR(onlyDigits(wa.value));
-  });
-
+  /* ===== Utils ===== */
   function uuidv4(){
     return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>
       (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
     );
   }
-
   function showMsg(text, kind='ok'){
     const out = document.getElementById('out');
     out.hidden = false;
     out.className = 'msg ' + (kind === 'err' ? 'err' : 'ok');
     out.textContent = text;
   }
+  const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
+  async function retry(fn, {tries=3, base=400}={}){
+    let err;
+    for(let i=0;i<tries;i++){
+      try{ return await fn(); }catch(e){ err=e; await wait(base*Math.pow(2,i)); }
+    }
+    throw err;
+  }
+  function lsGetJSON(k, fallback){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(_){ return fallback; } }
+  function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
+
+  /* ===== Fila offline do cadastro =====
+     Guarda o payload completo {id,nome,cidade,whatsapp,consent,created_at}
+     e reenfileira até confirmar no servidor (idempotente por whatsapp). */
+  async function flushSignupQueueOnce(){
+    const q = lsGetJSON(LS_KEYS.queue, []);
+    if(!q.length) return;
+    const next = q[0];
+    try{
+      // upsert idempotente por whatsapp, sem sobrescrever campos existentes
+      const { data, error } = await client
+        .from('users')
+        .upsert(next, { onConflict: 'whatsapp', ignoreDuplicates: true })
+        .select('id')
+        .maybeSingle();
+      if(error && !String(error.message||'').toLowerCase().includes('duplicate')){
+        throw error;
+      }
+      // se não voltou id, busca pelo whatsapp
+      let userId = data?.id;
+      if(!userId){
+        const { data: found, error: err2 } = await client
+          .from('users').select('id').eq('whatsapp', next.whatsapp).maybeSingle();
+        if(err2) throw err2;
+        userId = found?.id || next.id; // fallback ao id local
+      }
+      // remove da fila
+      q.shift(); lsSetJSON(LS_KEYS.queue, q);
+      // garante hn_user_id
+      localStorage.setItem('hn_user_id', userId);
+    }catch(_){
+      // mantém na fila para próxima tentativa
+    }
+  }
+  function scheduleQueueFlusher(){
+    setInterval(flushSignupQueueOnce, 7000);
+    window.addEventListener('online', flushSignupQueueOnce);
+    window.addEventListener('focus', flushSignupQueueOnce);
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') flushSignupQueueOnce(); });
+  }
+  scheduleQueueFlusher();
+
+  /* ===== Botão / Token anti-replay ===== */
+  let submitting = false;
+  function setBusy(b){ submitting = b; document.getElementById('submitBtn').disabled = b; }
 
   async function saveUser(e){
     e.preventDefault();
-    const btn = document.getElementById('submitBtn'); 
-    btn.disabled = true;
-    const out = document.getElementById('out'); 
-    out.hidden = true;
+    if(submitting) return false;
+    setBusy(true);
+    const out = document.getElementById('out'); out.hidden = true;
 
     const nome = document.getElementById('nome').value.trim();
     const cidade = document.getElementById('cidade').value.trim();
@@ -269,67 +267,73 @@
     const consent = document.getElementById('consent').checked;
 
     if(!nome || !cidade || !whatsappMasked || !consent){
-      alert('Preencha todos os campos e aceite a Política de Privacidade.');
-      btn.disabled = false; 
-      return false;
+      showMsg('Preencha todos os campos e aceite a Política de Privacidade.', 'err');
+      setBusy(false); return false;
     }
 
-    const whatsapp = whatsappMasked.replace(/\D/g,''); // só dígitos
+    const whatsapp = onlyDigits(whatsappMasked);
+    if(whatsapp.length < 10){
+      showMsg('Digite um WhatsApp válido (com DDD).', 'err');
+      setBusy(false); return false;
+    }
+
     const id = uuidv4();
     const created_at = new Date().toISOString();
+    const payload = { id, nome, cidade, whatsapp, consent, created_at };
+
+    // token anti-replay por 60s
+    const tokenNow = Date.now();
+    localStorage.setItem(LS_KEYS.token, String(tokenNow));
 
     try{
-      // 1) PRÉ-CHECAGEM: já existe esse WhatsApp?
-      const q = new URL(PROJECT_URL + "/rest/v1/users");
-      q.searchParams.set("whatsapp", "eq."+whatsapp);
-      q.searchParams.set("select", "id");
-      q.searchParams.set("limit", "1");
-      const existsRes = await fetch(q.toString(), {
-        headers:{
-          "apikey": ANON_KEY,
-          "Authorization": "Bearer " + ANON_KEY
+      // 1) upsert idempotente por whatsapp (não sobrescreve se já existir)
+      const upsertFn = async ()=>{
+        const { data, error, status } = await client
+          .from('users')
+          .upsert(payload, { onConflict: 'whatsapp', ignoreDuplicates: true })
+          .select('id')
+          .maybeSingle();
+
+        if(error){
+          // Erros de política (401/403/42501)
+          const m = (error.message||'').toLowerCase();
+          if(status===401 || status===403 || m.includes('rls') || m.includes('policy')){
+            throw new Error('Permissão negada (RLS). Avise o suporte para liberar o cadastro público da tabela "users".');
+          }
+          // Se não for duplicidade, propaga
+          if(!m.includes('duplicate') && status!==409) throw error;
         }
-      });
-      if(!existsRes.ok){
-        const t = await existsRes.text();
-        throw new Error("Falha na verificação de WhatsApp ("+existsRes.status+"): "+t);
-      }
-      const existing = await existsRes.json();
-      if(Array.isArray(existing) && existing.length > 0){
-        showMsg("⚠️ Este número de WhatsApp já está cadastrado. Cada número pode participar apenas uma vez.", "err");
-        btn.disabled = false;
-        return false;
-      }
 
-      // 2) INSERT
-      const res = await fetch(PROJECT_URL+"/rest/v1/users",{
-        method:"POST",
-        headers:{
-          "apikey":ANON_KEY,"Authorization":"Bearer "+ANON_KEY,
-          "Content-Type":"application/json","Prefer":"return=minimal"
-        },
-        body: JSON.stringify({ id, nome, cidade, whatsapp, consent, created_at })
-      });
-
-      if(!res.ok){
-        const t = await res.text();
-        const low = t.toLowerCase();
-        if(res.status === 409 || low.includes('duplicate') || low.includes('unique')){
-          showMsg("⚠️ Este número de WhatsApp já está cadastrado. Cada número pode participar apenas uma vez.", "err");
-          btn.disabled = false;
-          return false;
+        // Se duplicou, consulta o id existente
+        let userId = data?.id;
+        if(!userId){
+          const { data: found, error: err2 } = await client
+            .from('users').select('id').eq('whatsapp', whatsapp).maybeSingle();
+          if(err2) throw err2;
+          userId = found?.id || id;
         }
-        throw new Error("Falha ao salvar ("+res.status+"): "+t);
-      }
+        return userId;
+      };
 
-      localStorage.setItem('hn_user_id', id);
-      showMsg("Cadastro salvo com sucesso!\nAgora você pode iniciar o quiz.", "ok");
-      setTimeout(()=> window.location.href="quiz.html", 600);
+      const userId = await retry(upsertFn, { tries: 3, base: 500 });
+      localStorage.setItem('hn_user_id', userId);
+
+      showMsg('Cadastro salvo com sucesso! Redirecionando para o quiz…', 'ok');
+      setTimeout(()=>location.href='quiz.html', 500);
 
     }catch(err){
-      alert(err.message);
+      // Falha de rede / servidor: coloca na fila offline e segue
+      if(navigator.onLine === false || /network|fetch|timeout/i.test(String(err?.message||''))){
+        const queue = lsGetJSON(LS_KEYS.queue, []);
+        queue.push(payload); lsSetJSON(LS_KEYS.queue, queue);
+        localStorage.setItem('hn_user_id', id); // mantém consistência pro quiz
+        showMsg('Você está offline ou instável. Salvamos localmente e tentaremos enviar ao servidor em segundo plano. Prosseguindo para o quiz…', 'ok');
+        setTimeout(()=>location.href='quiz.html', 600);
+      }else{
+        showMsg((err && err.message) ? err.message : 'Falha ao salvar seu cadastro.', 'err');
+      }
     }finally{
-      btn.disabled = false;
+      setBusy(false);
     }
     return false;
   }
