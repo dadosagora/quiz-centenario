@@ -278,7 +278,9 @@
   }
   function esc(s){ return String(s??'').replace(/[<>&"]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c])); }
   function formatDate(d){ if(!d) return ''; const dt = new Date(d); return dt.toLocaleString('pt-BR'); }
-  function badgeStatus(s){ const map = { pendente:'A retirar', retirado:'Retirado', expirado:'Expirado' }; return `<span class="chip">${map[s]||s]}</span>`.replace('}]','}');
+   function badgeStatus(s){
+    const map = { pendente: 'A retirar', retirado: 'Retirado', expirado: 'Expirado' };
+    return `<span class="chip">${map[s] ?? s}</span>`;
   function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
   // ====== TABS ======
