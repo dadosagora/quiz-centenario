@@ -215,7 +215,7 @@
   <img class="banner" src="../assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos – banner"/>
 </footer>
 
-<!-- Supabase client (para ler a view do ranking) -->
+<!-- Supabase client (para ler a view do ranking e notas dos participantes) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <!-- MODAL – Nova/Editar pergunta -->
@@ -278,7 +278,7 @@
   }
   function esc(s){ return String(s??'').replace(/[<>&"]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c])); }
   function formatDate(d){ if(!d) return ''; const dt = new Date(d); return dt.toLocaleString('pt-BR'); }
-  function badgeStatus(s){ const map = { pendente:'A retirar', retirado:'Retirado', expirado:'Expirado' }; return `<span class="chip">${map[s]||s}</span>`; }
+  function badgeStatus(s){ const map = { pendente:'A retirar', retirado:'Retirado', expirado:'Expirado' }; return `<span class="chip">${map[s]||s]}</span>`.replace('}]','}');
   function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
   // ====== TABS ======
@@ -304,8 +304,18 @@
   const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
   if (!ADMIN_TOKEN) window.location.href = "login.html";
 
-  // supabase client só para leitura do ranking (view pública)
-  const sb = supabase.createClient(SUPABASE_URL, ANON);
+  // supabase client só para leitura (com no-cache) da view pública
+  const sb = supabase.createClient(SUPABASE_URL, ANON, {
+    global: {
+      fetch: (url, opts={}) => {
+        const h = new Headers(opts.headers||{});
+        h.set("Cache-Control","no-store, max-age=0");
+        h.set("Pragma","no-cache");
+        h.set("X-Requested-At", String(Date.now()));
+        return fetch(url, { ...opts, headers: h });
+      }
+    }
+  });
 
   async function callApi(endpoint, payload) {
     const res = await fetch(`${FN_BASE}/${endpoint}`, {
@@ -551,10 +561,37 @@
   $('p-export').onclick = exportParticipants;
   $('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
+  // Busca notas corretas diretamente na view pública
+  async function fetchStatsFromView(userIds){
+    const out = new Map();
+    if(!userIds.length) return out;
+
+    // quebre em blocos para evitar URL grande
+    const chunkSize = 200;
+    for(let i=0;i<userIds.length;i+=chunkSize){
+      const slice = userIds.slice(i, i+chunkSize);
+      const { data, error } = await sb
+        .from('public_leaderboard_v')
+        .select('id,first_try_hits,total_answered')
+        .in('id', slice);
+
+      if (!error && Array.isArray(data)) {
+        for(const r of data){
+          out.set(r.id, {
+            first_try_hits: r.first_try_hits ?? 0,
+            total_answered: r.total_answered ?? 0
+          });
+        }
+      }
+    }
+    return out;
+  }
+
   async function loadParticipants(){
     pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
     try{
       const search = $('p-search').value.trim() || undefined;
+      // 1) Lista básica (users) continua vindo da sua Edge Function (respeita RLS e filtros)
       const { items } = await AdminAPI.listParticipants(search || "");
       if(!items.length){ 
         pBody.innerHTML=''; 
@@ -564,22 +601,15 @@
       }
       pEmpty.style.display='none';
 
+      // 2) Busca notas consistentes direto da VIEW
       const userIds = items.map(u=>u.id);
-      let statsMap = new Map();
-      try{
-        const statsRes = await AdminAPI.bulkStatsParticipants(userIds);
-        statsMap = new Map((statsRes.items||[]).map(s => [s.user_id, s]));
-      }catch(e){
-        console.warn('Falha ao obter stats_bulk:', e);
-      }
+      const statsMap = await fetchStatsFromView(userIds);
 
       pBody.innerHTML = items.map(u => {
-        const st = statsMap.get(u.id) || {};
-        const hasDownload = !!st.has_download;
+        const st = statsMap.get(u.id) || { first_try_hits: 0, total_answered: 0 };
+        const hasDownload = !!u.has_download; // se sua função já manda, mantemos; se não, mostra "Não"
         const badge = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
-        const hits = (typeof st.first_try_hits === 'number') ? st.first_try_hits : null;
-        const tot  = (typeof st.total_answered === 'number') ? st.total_answered : null;
-        const nota = (hits!==null && tot!==null) ? `${hits} / ${tot}` : '—';
+        const nota = `${st.first_try_hits} / ${st.total_answered}`;
         return `
           <tr>
             <td>${esc(u.nome)}</td>
@@ -592,16 +622,17 @@
         `;
       }).join('');
 
+      // 3) Exportação
       const rowsForExport = items.map(u => {
-        const st = statsMap.get(u.id) || {};
+        const st = statsMap.get(u.id) || { first_try_hits: 0, total_answered: 0 };
         return {
           nome: u.nome,
           cidade: u.cidade,
           whatsapp: u.whatsapp,
           created_at: u.created_at,
-          download: st.has_download ? 'Sim' : 'Não',
-          acertos_primeira: (typeof st.first_try_hits==='number') ? st.first_try_hits : '',
-          total_respondidas: (typeof st.total_answered==='number') ? st.total_answered : ''
+          download: u.has_download ? 'Sim' : 'Não',
+          acertos_primeira: st.first_try_hits,
+          total_respondidas: st.total_answered
         };
       });
       pBody.dataset.rows = JSON.stringify(rowsForExport);
