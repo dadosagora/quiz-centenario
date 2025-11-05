@@ -54,6 +54,14 @@
     .modal-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #eee}
 
     .dash-split{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+
+    /* ====== EFEITO ZEBRA (apenas para Perguntas e Participantes) ====== */
+    table.zebra tbody tr:nth-child(even){
+      background-color:#fafafa; /* cinza clarinho */
+    }
+    table.zebra tbody tr:hover{
+      background-color:#f3f4f6; /* leve destaque no hover */
+    }
   </style>
 </head>
 <body>
@@ -134,15 +142,6 @@
     </div>
   </section>
 
-  /* ====== EFEITO ZEBRA ====== */
-table.zebra tbody tr:nth-child(even){
-  background-color: #fafafa;  /* cinza clarinho */
-}
-
-table.zebra tbody tr:hover{
-  background-color: #f3f4f6;  /* leve destaque no hover */
-}
-
   <!-- PERGUNTAS -->
   <section id="tab-questions" class="cards" style="display:none">
     <div class="card">
@@ -151,7 +150,7 @@ table.zebra tbody tr:hover{
         <input id="q-search" type="search" placeholder="Buscar enunciado…"/>
         <button class="btn" id="q-new">+ Nova</button>
       </div>
-      <table id="q-table">
+      <table id="q-table" class="zebra">
         <thead><tr>
           <th>Enunciado</th><th>A</th><th>B</th><th>C</th><th>D</th>
           <th>Correta</th><th>Ativa</th>
@@ -173,7 +172,7 @@ table.zebra tbody tr:hover{
         <button class="btn secondary" id="p-export">Exportar CSV</button>
       </div>
 
-      <table id="p-table">
+      <table id="p-table" class="zebra">
         <thead>
           <tr>
             <th>Nome</th>
