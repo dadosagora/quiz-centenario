@@ -289,6 +289,17 @@
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
+  /* ===== Persistência local ===== */
+  const LS_KEYS = {
+    asked: 'hn_asked_ids',
+    ans1:  'hn_answered_total',
+    done:  'hn_total_concluidas',
+    queue: 'hn_submit_queue'
+  };
+  function lsGetJSON(k, fallback){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(_){ return fallback; } }
+  function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
+
+  /* ===== Estado ===== */
   const els = {
     progressWrap: document.getElementById('progressWrap'),
     progressText: document.getElementById('progressText'),
@@ -327,10 +338,10 @@
 
   let userId = null;
   let allQuestions = [];
-  let askedIds = new Set();
+  let askedIds = new Set(lsGetJSON(LS_KEYS.asked, []));
 
-  let answeredTotal = 0;      // acertos de primeira (global)
-  let totalConcluidas = 0;    // perguntas concluídas (global)
+  let answeredTotal = Number(localStorage.getItem(LS_KEYS.ans1) || 0);      // acertos de 1ª (global)
+  let totalConcluidas = Number(localStorage.getItem(LS_KEYS.done) || 0);    // perguntas concluídas (global)
 
   let batch = [];
   let idxInBatch = 0;
@@ -340,6 +351,8 @@
   let currentAttempts   = 0;
   let locked            = false;
   let handlingClick     = false;
+
+  const submitQueue = lsGetJSON(LS_KEYS.queue, []); // fila offline de submissions
 
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
   const fmtDateISO = (d)=>d.toISOString();
@@ -359,23 +372,64 @@
   if (dbgEl) dbgEl.style.display = 'none';
   function dbgShow(msg){ if(!DEBUG_PANEL || !dbgEl) return; dbgEl.style.display='block'; dbgEl.innerHTML = msg; }
   async function dbgLog(where, extra={}){ if(!DEBUG_LOGS) return; try{ await client.from('client_logs').insert({ user_id: userId||null, message:`[${where}]`, stack: JSON.stringify(extra), current_question: idxInBatch+1, useragent:navigator.userAgent, current_url:location.href }); }catch(_){} }
-  function dbgState(extraMsg=''){ const q=batch[idxInBatch]||{}; const msg=[`<b>estado</b> idx=${idxInBatch}/${Math.max(0,batch.length-1)}`,`qid=${q.id??'—'}`,`correta=<b>${currentCorrectKey||'?'}</b>`,`tentativas=${currentAttempts}`,`globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,extraMsg&&`<span class="bad">${extraMsg}</span>`].filter(Boolean).join(' • '); dbgShow(msg); }
+  function dbgState(extraMsg=''){ const q=batch[idxInBatch]||{}; const msg=[`<b>estado</b> idx=${idxInBatch}/${Math.max(0,batch.length-1)}`,`qid=${q?.id??'—'}`,`correta=<b>${currentCorrectKey||'?'}</b>`,`tentativas=${currentAttempts}`,`globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,extraMsg&&`<span class="bad">${extraMsg}</span>`].filter(Boolean).join(' • '); dbgShow(msg); }
 
+  /* ===== Util: retry com backoff ===== */
   async function withTimeout(promise, ms, label='op'){
     let timer;
     const timeout = new Promise((_, rej)=>{ timer = setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)), ms); });
     try{ const res = await Promise.race([promise, timeout]); clearTimeout(timer); return res; }
     catch(err){ clearTimeout(timer); try{ await client.from('client_logs').insert({ user_id: userId||null, message: err.message, stack: null, current_question: idxInBatch+1, useragent:navigator.userAgent, current_url: location.href }); }catch(_){} throw err; }
   }
+  async function retry(fn, {tries=3, baseDelay=400, label='op'} = {}){
+    let lastErr;
+    for(let i=0;i<tries;i++){
+      try{ return await fn(); }catch(e){ lastErr=e; await wait(baseDelay * Math.pow(2,i)); }
+    }
+    throw lastErr;
+  }
+
+  /* ===== Fila offline de submissões ===== */
+  function queueSubmission(payload){
+    submitQueue.push(payload);
+    lsSetJSON(LS_KEYS.queue, submitQueue);
+  }
+  async function flushQueueOnce(){
+    if(!submitQueue.length) return;
+    const copy = submitQueue.slice(0, 10); // processa em blocos
+    for(const item of copy){
+      try{
+        const { error } = await withTimeout(
+          client.from('submissions').insert(item),
+          6000, 'flushQueue.insert'
+        );
+        if(error) throw error;
+        // removendo da fila:
+        const idx = submitQueue.indexOf(item);
+        if(idx > -1) submitQueue.splice(idx,1);
+      }catch(_){ /* mantém na fila para próxima tentativa */ }
+    }
+    lsSetJSON(LS_KEYS.queue, submitQueue);
+  }
+  function scheduleQueueFlusher(){
+    setInterval(flushQueueOnce, 7000);
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') flushQueueOnce(); });
+    window.addEventListener('focus', flushQueueOnce);
+    window.addEventListener('online', flushQueueOnce);
+  }
 
   async function insertSubmission({ user_id, question_id, first_try_correct }){
+    const payload = { user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) };
     try{
-      const { error } = await withTimeout(
-        client.from('submissions').insert({ user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) }),
-        5000,'insertSubmission'
-      );
-      if(error) throw error;
-    }catch(e){ console.error('Erro ao gravar submission:', e); }
+      const fn = async()=> {
+        const { error } = await withTimeout(client.from('submissions').insert(payload), 6000,'insertSubmission');
+        if(error) throw error;
+      };
+      await retry(fn, { tries: 3, baseDelay: 500, label: 'insertSubmission' });
+    }catch(e){
+      // Falhou: guarda para reenvio
+      queueSubmission(payload);
+    }
   }
 
   /* (1) prazo fixo 30/11 para todos */
@@ -400,7 +454,6 @@
       ).catch(e=>({ error:e }));
       if(!error) return { code, issuedAt, expiresAt };
       if(String((error.message||'') + '').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
-      console.warn('Falha ao criar voucher, fallback local.');
     }
     return { code, issuedAt, expiresAt };
   }
@@ -419,10 +472,23 @@
 
   function hardResetLocks(){ locked=false; handlingClick=false; enableOptions(); clearOptStates(); }
 
+  function questionIsValid(q){
+    if(!q) return false;
+    if(!q.id || !q.enunciado) return false;
+    const hasAtLeastOneAlt = (q.alternativa_a||q.alternativa_b||q.alternativa_c||q.alternativa_d);
+    if(!hasAtLeastOneAlt) return false;
+    return true;
+  }
+
   function renderQuestion(){
     try{
       const q = batch[idxInBatch];
       if(!q){ showFinal(); return; }
+      if(!questionIsValid(q)){ // pula inválidas silenciosamente
+        idxInBatch++;
+        if(idxInBatch >= batch.length){ showFinal(); return; }
+        return renderQuestion();
+      }
       updateProgress();
 
       currentAttempts = 0;
@@ -449,8 +515,6 @@
       }
       if(!['a','b','c','d'].includes(currentCorrectKey)){
         currentCorrectKey='a';
-        console.warn('Pergunta sem correta resolvível:', q?.id);
-        dbgState('⚠ não foi possível resolver a alternativa correta');
       }
 
       els.options.innerHTML = optsRaw.map(o => `
@@ -494,12 +558,17 @@
 
         const q = batch[idxInBatch];
 
-        if (!askedIds.has(q.id)) totalConcluidas += 1;
-        askedIds.add(q.id);
+        if (!askedIds.has(q.id)) {
+          totalConcluidas += 1;
+          askedIds.add(q.id);
+          localStorage.setItem(LS_KEYS.done, String(totalConcluidas));
+          lsSetJSON(LS_KEYS.asked, Array.from(askedIds));
+        }
 
         if (currentAttempts === 1) {
           batchCorrect++;
           answeredTotal++;
+          localStorage.setItem(LS_KEYS.ans1, String(answeredTotal));
         }
 
         insertSubmission({
@@ -525,11 +594,11 @@
       reportErrorToSupabase(e);
     }
   }
-  els.options.addEventListener('click', handleOptionActivate);
-  els.options.addEventListener('pointerup', handleOptionActivate);
+  // Garante apenas um bind
+  els.options.addEventListener('click', handleOptionActivate, { passive:true });
 
   function startBatch(){
-    const remaining = allQuestions.filter(q => !askedIds.has(q.id));
+    const remaining = allQuestions.filter(q => q && q.ativa && !askedIds.has(q.id));
     batch = remaining.slice(0, BATCH_SIZE);
     idxInBatch = 0;
     batchCorrect = 0;
@@ -541,17 +610,21 @@
   }
 
   async function loadAllQuestions(){
-    try{
+    const fetchOnce = async () => {
       const { data, error } = await withTimeout(
         client.from('questions')
           .select('id,enunciado,alternativa_a,alternativa_b,alternativa_c,alternativa_d,correta,ativa')
           .eq('ativa', true),
-        7000,'loadAllQuestions'
+        8000,'loadAllQuestions'
       );
       if(error) throw error;
-      return shuffle(data || []);
+      const filtered = (data||[]).filter(q => questionIsValid(q));
+      return shuffle(filtered);
+    };
+    try{
+      return await retry(fetchOnce, { tries: 3, baseDelay: 700, label: 'loadAllQuestions' });
     }catch(e){
-      console.error('Erro ao buscar perguntas:', e);
+      console.error('Erro ao buscar perguntas (fallback vazio):', e?.message||e);
       reportErrorToSupabase(e);
       return [];
     }
@@ -632,7 +705,6 @@
       if (error) throw error;
       return Array.isArray(data) ? data : [];
     }catch(e){
-      console.warn('fallback leaderboard error:', e);
       return [];
     }
   }
@@ -762,7 +834,6 @@
             els.lbConsent.style.display = 'none';
           }catch(e){
             els.lbMsg.textContent = 'Falha ao carregar o ranking. Tente novamente.';
-            console.warn(e);
           }finally{
             els.lbSave.disabled = false; els.lbSkip.disabled = false;
           }
@@ -779,7 +850,8 @@
 
       els.progressBar.style.width = '100%';
 
-      const shareLink = (location.origin || 'https://hnnoticias.com.br') + '/index.html';
+      const origin = (location && location.origin) ? location.origin : 'https://hnnoticias.com.br';
+      const shareLink = origin + '/index.html';
       const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
       els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
 
@@ -838,17 +910,15 @@
         useragent: navigator.userAgent, current_url: location.href
       });
     } catch (logErr) {
-      console.warn("Falha ao registrar erro:", logErr);
+      // silencioso
     }
   }
   window.addEventListener("error", (ev) => {
     const payload = ev.error || { message: ev.message || 'Erro de janela' };
-    console.error("Erro global:", payload);
     reportErrorToSupabase(payload);
   });
   window.addEventListener("unhandledrejection", (ev) => {
     const payload = ev.reason || { message: 'Promise Rejection' };
-    console.error("Promise Rejection:", payload);
     reportErrorToSupabase(payload);
   });
 
@@ -863,17 +933,29 @@
       markSafeNavigation(document.getElementById('btnShare'));
       markSafeNavigation(document.getElementById('btnDownload'));
 
+      scheduleQueueFlusher(); // inicia reenvio de fila offline
+
       allQuestions = await loadAllQuestions();
       if(!allQuestions.length){
-        document.getElementById('question').textContent='Nenhuma pergunta ativa encontrada no momento.';
-        document.getElementById('options').innerHTML='';
+        els.question.textContent='Nenhuma pergunta ativa encontrada no momento.';
+        els.options.innerHTML='';
         els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
+        disableExitProtection();
+        // Mesmo assim deixa o usuário ver final suave
+        showView('final');
+        els.finalTitle.textContent = 'Ops! Sem perguntas ativas agora';
+        els.finalSubtitle.textContent = 'Tente novamente em alguns minutos.';
+        els.continueRow.style.display='none';
         return;
       }
       startBatch();
     }catch(e){
-      console.error('Falha no init:', e);
       reportErrorToSupabase(e);
+      // fallback seguro
+      disableExitProtection();
+      showView('final');
+      els.finalTitle.textContent = 'Concluído!';
+      els.finalSubtitle.textContent = 'Tivemos uma instabilidade. Tente continuar em instantes.';
     }
   })();
 </script>
