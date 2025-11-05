@@ -38,13 +38,11 @@
     footer{border-top:1px solid var(--border);padding:10px;display:flex;justify-content:center}
     .banner{max-width:100%;height:auto}
 
-    /* KPI grid */
     .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:10px;margin-top:10px}
     .kpi{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff}
     .kpi .label{color:#6b7280;font-size:12px}
     .kpi .value{font-weight:900;font-size:22px;margin-top:4px}
 
-    /* modal */
     dialog{border:0;border-radius:14px;padding:0;max-width:720px}
     .modal-h{padding:10px 14px;border-bottom:1px solid #eee;font-weight:800}
     .modal-b{padding:10px 14px}
@@ -55,7 +53,6 @@
     textarea{min-height:72px;resize:vertical}
     .modal-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #eee}
 
-    /* dashboard split */
     .dash-split{display:grid;grid-template-columns:2fr 1fr;gap:12px}
   </style>
 </head>
@@ -91,7 +88,6 @@
       </div>
       <div class="muted">Métricas gerais (todo o período)</div>
 
-      <!-- KPIs -->
       <div class="kpi-grid">
         <div class="kpi"><div class="label">Perguntas ativas</div><div id="kpi-questions" class="value">—</div></div>
         <div class="kpi"><div class="label">Participantes (total)</div><div id="kpi-users" class="value">—</div></div>
@@ -117,7 +113,6 @@
       </div>
     </div>
 
-    <!-- NOVO: Ranking (Top 20) -->
     <div class="card">
       <h2>Ranking (Top 20)</h2>
       <div class="muted" id="lb-hint">Classificação por acertos de primeira.</div>
@@ -215,10 +210,8 @@
   <img class="banner" src="../assets/banner-projeto-centenario.png.jpg" alt="Projeto Criciúma 100 Anos – banner"/>
 </footer>
 
-<!-- Supabase client (para ler a view do ranking e notas dos participantes) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- MODAL – Nova/Editar pergunta -->
 <dialog id="dlg-q">
   <div class="modal-h" id="dlg-q-title">Nova pergunta</div>
   <div class="modal-b">
@@ -252,7 +245,6 @@
   </div>
 </dialog>
 
-<!-- === Admin API Helper === -->
 <script>
   // ====== AUTENTICAÇÃO ======
   const token = localStorage.getItem('hn_admin_token');
@@ -299,7 +291,6 @@
   }
 </script>
 
-<!-- === Admin API Helper (Edge Functions) === -->
 <script>
   const FN_BASE = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1";
   const SUPABASE_URL = "https://fpstwfzqvactvlgwgagu.supabase.co";
@@ -307,7 +298,7 @@
   const ADMIN_TOKEN = localStorage.getItem("hn_admin_token");
   if (!ADMIN_TOKEN) window.location.href = "login.html";
 
-  // supabase client só para leitura (com no-cache) da view pública
+  // client p/ views públicas (no-cache)
   const sb = supabase.createClient(SUPABASE_URL, ANON, {
     global: {
       fetch: (url, opts={}) => {
@@ -406,7 +397,7 @@
     }
   }
 
-  // ====== RANKING (view pública) ======
+  // ====== RANKING ======
   async function loadLeaderboard(){
     const tbody = $('lb-body');
     try{
@@ -439,10 +430,10 @@
     }
   }
 
-  // ====== PERGUNTAS (CRUD + estatísticas) ======
+  // ====== PERGUNTAS (agora lendo da VIEW) ======
   const qBody = $('q-table').querySelector('tbody');
   const qEmpty = $('q-empty');
-  $('q-new').onclick = ()=> openQ(); // novo vazio
+  $('q-new').onclick = ()=> openQ();
   $('q-search').addEventListener('input', debounce(loadQuestions, 300));
 
   qBody.addEventListener('click', (ev)=>{
@@ -462,37 +453,60 @@
     }
   });
 
+  async function fetchQuestionStatsFromView(ids){
+    // busca acertos/erros direto da view question_stats_v
+    const out = new Map();
+    if(!ids.length) return out;
+    const chunk = 200;
+    for(let i=0;i<ids.length;i+=chunk){
+      const slice = ids.slice(i,i+chunk);
+      const { data, error } = await sb
+        .from('question_stats_v')
+        .select('id,acertos_primeira,erros_primeira')
+        .in('id', slice);
+      if (!error && Array.isArray(data)){
+        data.forEach(r=>{
+          out.set(r.id, {
+            acertos: Number(r.acertos_primeira)||0,
+            erros:   Number(r.erros_primeira)||0
+          });
+        });
+      }
+    }
+    return out;
+  }
+
   async function loadQuestions(){
     qBody.innerHTML = '<tr><td colspan="10">Carregando…</td></tr>';
     try{
       const filters = { search: $('q-search').value.trim() || undefined };
       const { items } = await AdminAPI.listQuestions(filters);
-
-      // Tenta obter estatísticas de várias formas (compatível com versões antigas das functions)
-      let statsById = {};
-      try {
-        const ids = items.map(r=>r.id);
-        const resStats = await AdminAPI.questionsStats(ids);
-        if (resStats?.byId && typeof resStats.byId === 'object') {
-          statsById = resStats.byId;
-        } else if (Array.isArray(resStats?.items)) {
-          statsById = Object.fromEntries(
-            resStats.items.map(s => [s.question_id || s.id, s])
-          );
-        } else {
-          statsById = {};
-        }
-      } catch(_) { statsById = {}; }
-
       if(!items.length){ qBody.innerHTML=''; qEmpty.style.display='block'; return; }
       qEmpty.style.display='none';
 
+      // 1º tenta pela VIEW; se falhar, cai no fallback das Edge Functions
+      let statsById = new Map();
+      try{
+        statsById = await fetchQuestionStatsFromView(items.map(r=>r.id));
+      }catch(_){ statsById = new Map(); }
+
+      // Fallback (mantém compatibilidade)
+      if (statsById.size === 0){
+        try {
+          const ids = items.map(r=>r.id);
+          const resStats = await AdminAPI.questionsStats(ids);
+          const byId = resStats?.byId || {};
+          statsById = new Map(Object.entries(byId).map(([id, s])=>{
+            const ac = Number(s.acertos ?? s.first_try_hits ?? 0);
+            const tot = Number(s.total ?? s.total_answered ?? (ac + Number(s.erros ?? 0)));
+            const er = Number(s.erros ?? (tot - ac));
+            return [id, { acertos: Math.max(ac,0), erros: Math.max(er,0) }];
+          }));
+        }catch(_){}
+      }
+
       qBody.innerHTML = items.map(row => {
-        const st = statsById[row.id] || {};
-        const ac = coalesceNum(
-          st.acertos, st.correct, st.correct_count, st.first_try_correct, st.first_try_hits, 0
-        );
-        const er = computeErros(st, ac);
+        const st = statsById.get(row.id) || { acertos:0, erros:0 };
         const encoded = encodeURIComponent(JSON.stringify(row));
         return `
         <tr>
@@ -503,8 +517,8 @@
           <td>${esc(row.alternativa_d)}</td>
           <td><span class="chip">${String(row.correta||'').toUpperCase()}</span></td>
           <td>${row.ativa ? 'Sim':'Não'}</td>
-          <td>${ac}</td>
-          <td>${er}</td>
+          <td>${st.acertos}</td>
+          <td>${st.erros}</td>
           <td class="actions">
             <button class="btn secondary" data-action="edit" data-row="${encoded}">Editar</button>
             <button class="btn secondary" data-action="delete" data-id="${row.id}">Excluir</button>
@@ -515,19 +529,6 @@
       qBody.innerHTML = `<tr><td colspan="10" class="warn">Erro ao carregar: ${esc(err.message)}</td></tr>`;
     }
   }
-
-  function coalesceNum(...vals){
-    for (const v of vals){ const n = Number(v); if (!Number.isNaN(n) && n>=0) return n; }
-    return 0;
-  }
-  function computeErros(st, acertos){
-    // tenta pegar um campo de “erros” direto; se não houver, tenta total-acertos
-    const err = coalesceNum(st.erros, st.wrong, st.wrong_count, st.errors, st.incorrect, st.incorrect_count, -1);
-    if (err >= 0) return err;
-    const total = coalesceNum(st.total, st.total_answered, st.count, st.answers, 0);
-    const v = total - acertos;
-    return v >= 0 ? v : 0;
-    }
 
   function openQ(data){
     const dlg = $('dlg-q'); $('dlg-q-title').textContent = data && data.id ? 'Editar pergunta' : 'Nova pergunta';
@@ -588,11 +589,9 @@
   $('p-export').onclick = exportParticipants;
   $('p-search').addEventListener('input', debounce(loadParticipants, 300));
 
-  // Busca notas corretas diretamente na view pública
   async function fetchStatsFromView(userIds){
     const out = new Map();
     if(!userIds.length) return out;
-
     const chunkSize = 200;
     for(let i=0;i<userIds.length;i+=chunkSize){
       const slice = userIds.slice(i, i+chunkSize);
@@ -600,7 +599,6 @@
         .from('public_leaderboard_v')
         .select('id,first_try_hits,total_answered')
         .in('id', slice);
-
       if (!error && Array.isArray(data)) {
         for(const r of data){
           out.set(r.id, {
@@ -666,12 +664,6 @@
     }
   }
 
-  function exportParticipants(){
-    const rows = JSON.parse(pBody.dataset.rows || "[]");
-    if(!rows.length){ alert("Nada para exportar."); return; }
-    csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows);
-  }
-
   // ====== VOUCHERS ======
   const vBody = $('v-table').querySelector('tbody');
   const vEmpty = $('v-empty');
@@ -723,7 +715,7 @@
   // ====== BOOT ======
   switchTab('dash');
   loadDash();
-  loadLeaderboard(); // garante carregar na primeira entrada no dashboard
+  loadLeaderboard();
 </script>
 </body>
 </html>
