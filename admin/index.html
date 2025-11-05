@@ -278,9 +278,10 @@
   }
   function esc(s){ return String(s??'').replace(/[<>&"]/g, c=>({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c])); }
   function formatDate(d){ if(!d) return ''; const dt = new Date(d); return dt.toLocaleString('pt-BR'); }
-   function badgeStatus(s){
+  function badgeStatus(s){
     const map = { pendente: 'A retirar', retirado: 'Retirado', expirado: 'Expirado' };
     return `<span class="chip">${map[s] ?? s}</span>`;
+  }
   function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
   // ====== TABS ======
@@ -467,11 +468,20 @@
       const filters = { search: $('q-search').value.trim() || undefined };
       const { items } = await AdminAPI.listQuestions(filters);
 
+      // Tenta obter estatísticas de várias formas (compatível com versões antigas das functions)
       let statsById = {};
       try {
         const ids = items.map(r=>r.id);
         const resStats = await AdminAPI.questionsStats(ids);
-        statsById = resStats?.byId || {};
+        if (resStats?.byId && typeof resStats.byId === 'object') {
+          statsById = resStats.byId;
+        } else if (Array.isArray(resStats?.items)) {
+          statsById = Object.fromEntries(
+            resStats.items.map(s => [s.question_id || s.id, s])
+          );
+        } else {
+          statsById = {};
+        }
       } catch(_) { statsById = {}; }
 
       if(!items.length){ qBody.innerHTML=''; qEmpty.style.display='block'; return; }
@@ -479,8 +489,10 @@
 
       qBody.innerHTML = items.map(row => {
         const st = statsById[row.id] || {};
-        const ac = (typeof st.acertos === 'number') ? st.acertos : '—';
-        const er = (typeof st.erros   === 'number') ? st.erros   : '—';
+        const ac = coalesceNum(
+          st.acertos, st.correct, st.correct_count, st.first_try_correct, st.first_try_hits, 0
+        );
+        const er = computeErros(st, ac);
         const encoded = encodeURIComponent(JSON.stringify(row));
         return `
         <tr>
@@ -503,6 +515,19 @@
       qBody.innerHTML = `<tr><td colspan="10" class="warn">Erro ao carregar: ${esc(err.message)}</td></tr>`;
     }
   }
+
+  function coalesceNum(...vals){
+    for (const v of vals){ const n = Number(v); if (!Number.isNaN(n) && n>=0) return n; }
+    return 0;
+  }
+  function computeErros(st, acertos){
+    // tenta pegar um campo de “erros” direto; se não houver, tenta total-acertos
+    const err = coalesceNum(st.erros, st.wrong, st.wrong_count, st.errors, st.incorrect, st.incorrect_count, -1);
+    if (err >= 0) return err;
+    const total = coalesceNum(st.total, st.total_answered, st.count, st.answers, 0);
+    const v = total - acertos;
+    return v >= 0 ? v : 0;
+    }
 
   function openQ(data){
     const dlg = $('dlg-q'); $('dlg-q-title').textContent = data && data.id ? 'Editar pergunta' : 'Nova pergunta';
@@ -568,7 +593,6 @@
     const out = new Map();
     if(!userIds.length) return out;
 
-    // quebre em blocos para evitar URL grande
     const chunkSize = 200;
     for(let i=0;i<userIds.length;i+=chunkSize){
       const slice = userIds.slice(i, i+chunkSize);
@@ -593,7 +617,6 @@
     pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
     try{
       const search = $('p-search').value.trim() || undefined;
-      // 1) Lista básica (users) continua vindo da sua Edge Function (respeita RLS e filtros)
       const { items } = await AdminAPI.listParticipants(search || "");
       if(!items.length){ 
         pBody.innerHTML=''; 
@@ -603,13 +626,12 @@
       }
       pEmpty.style.display='none';
 
-      // 2) Busca notas consistentes direto da VIEW
       const userIds = items.map(u=>u.id);
       const statsMap = await fetchStatsFromView(userIds);
 
       pBody.innerHTML = items.map(u => {
         const st = statsMap.get(u.id) || { first_try_hits: 0, total_answered: 0 };
-        const hasDownload = !!u.has_download; // se sua função já manda, mantemos; se não, mostra "Não"
+        const hasDownload = !!u.has_download;
         const badge = hasDownload ? '<span class="chip">Sim</span>' : '<span class="chip">Não</span>';
         const nota = `${st.first_try_hits} / ${st.total_answered}`;
         return `
@@ -624,7 +646,6 @@
         `;
       }).join('');
 
-      // 3) Exportação
       const rowsForExport = items.map(u => {
         const st = statsMap.get(u.id) || { first_try_hits: 0, total_answered: 0 };
         return {
