@@ -374,7 +374,7 @@
   async function dbgLog(where, extra={}){ if(!DEBUG_LOGS) return; try{ await client.from('client_logs').insert({ user_id: userId||null, message:`[${where}]`, stack: JSON.stringify(extra), current_question: idxInBatch+1, useragent:navigator.userAgent, current_url:location.href }); }catch(_){} }
   function dbgState(extraMsg=''){ const q=batch[idxInBatch]||{}; const msg=[`<b>estado</b> idx=${idxInBatch}/${Math.max(0,batch.length-1)}`,`qid=${q?.id??'—'}`,`correta=<b>${currentCorrectKey||'?'}</b>`,`tentativas=${currentAttempts}`,`globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,extraMsg&&`<span class="bad">${extraMsg}</span>`].filter(Boolean).join(' • '); dbgShow(msg); }
 
-  /* ===== Util: retry com backoff ===== */
+  /* ===== Util: timeout + retry ===== */
   async function withTimeout(promise, ms, label='op'){
     let timer;
     const timeout = new Promise((_, rej)=>{ timer = setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)), ms); });
@@ -387,6 +387,17 @@
       try{ return await fn(); }catch(e){ lastErr=e; await wait(baseDelay * Math.pow(2,i)); }
     }
     throw lastErr;
+  }
+
+  /* ===== helpers de idempotência (unique violation) ===== */
+  function isUniqueViolation(err){
+    const code = (err && (err.code || err.status || err.statusCode)) ?? '';
+    const msg = (err && err.message ? err.message : String(err)).toLowerCase();
+    return code === '23505' ||
+           msg.includes('duplicate key') ||
+           msg.includes('unique') ||
+           msg.includes('violates unique constraint') ||
+           msg.includes('ux_submissions_user_question'); // ajuste ao nome da sua constraint se diferente
   }
 
   /* ===== Fila offline de submissões ===== */
@@ -403,11 +414,21 @@
           client.from('submissions').insert(item),
           6000, 'flushQueue.insert'
         );
-        if(error) throw error;
-        // removendo da fila:
+        if(error){
+          if (isUniqueViolation(error)) {
+            // <<< já está gravado — consideramos sucesso e removemos da fila
+            const idx = submitQueue.indexOf(item);
+            if(idx > -1) submitQueue.splice(idx,1);
+            continue;
+          }
+          throw error;
+        }
+        // sucesso — remove
         const idx = submitQueue.indexOf(item);
         if(idx > -1) submitQueue.splice(idx,1);
-      }catch(_){ /* mantém na fila para próxima tentativa */ }
+      }catch(_){
+        // mantém na fila para próxima tentativa
+      }
     }
     lsSetJSON(LS_KEYS.queue, submitQueue);
   }
@@ -418,17 +439,23 @@
     window.addEventListener('online', flushQueueOnce);
   }
 
+  /* ===== INSERT RESILIENTE E IDEMPOTENTE ===== */
   async function insertSubmission({ user_id, question_id, first_try_correct }){
     const payload = { user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) };
     try{
       const fn = async()=> {
         const { error } = await withTimeout(client.from('submissions').insert(payload), 6000,'insertSubmission');
-        if(error) throw error;
+        if (error) {
+          if (isUniqueViolation(error)) return true; // <<< já inserido (click duplo ou retry): OK
+          throw error;
+        }
+        return true;
       };
-      await retry(fn, { tries: 3, baseDelay: 500, label: 'insertSubmission' });
+      return await retry(fn, { tries: 2, baseDelay: 500, label: 'insertSubmission' });
     }catch(e){
-      // Falhou: guarda para reenvio
+      // Falhou diferente de unique: guarda para reenvio
       queueSubmission(payload);
+      return false;
     }
   }
 
@@ -528,7 +555,6 @@
       dbgState();
 
     }catch(e){
-      console.error('Falha no renderQuestion:', e);
       reportErrorToSupabase(e);
     }
   }
@@ -590,7 +616,6 @@
         dbgState('✖ tentativa incorreta');
       }
     } catch (e) {
-      console.error('Falha ao processar resposta:', e);
       reportErrorToSupabase(e);
     }
   }
@@ -624,7 +649,6 @@
     try{
       return await retry(fetchOnce, { tries: 3, baseDelay: 700, label: 'loadAllQuestions' });
     }catch(e){
-      console.error('Erro ao buscar perguntas (fallback vazio):', e?.message||e);
       reportErrorToSupabase(e);
       return [];
     }
@@ -678,7 +702,6 @@
       if(error) throw error;
       return true;
     }catch(e){
-      console.warn('Falha ao gravar consentimento via RPC:', e?.message || e);
       try{
         await client.from('client_logs').insert({
           user_id: userId || null,
@@ -858,7 +881,6 @@
       dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued, remaining });
 
     }catch(e){
-      console.error('Falha no showFinal:', e);
       dbgLog('showFinal.error', { error: String(e) });
       reportErrorToSupabase(e);
       els.finalTitle.textContent = 'Concluído! 🎉';
