@@ -55,13 +55,9 @@
 
     .dash-split{display:grid;grid-template-columns:2fr 1fr;gap:12px}
 
-    /* ====== EFEITO ZEBRA (apenas para Perguntas e Participantes) ====== */
-    table.zebra tbody tr:nth-child(even){
-      background-color:#fafafa; /* cinza clarinho */
-    }
-    table.zebra tbody tr:hover{
-      background-color:#f3f4f6; /* leve destaque no hover */
-    }
+    /* ====== EFEITO ZEBRA (Perguntas e Participantes) ====== */
+    table.zebra tbody tr:nth-child(even){ background-color:#fafafa; }
+    table.zebra tbody tr:hover{ background-color:#f3f4f6; }
   </style>
 </head>
 <body>
@@ -255,6 +251,27 @@
   </div>
 </dialog>
 
+<!-- MODAL – Validar retirada com parceiro -->
+<dialog id="dlg-redeem">
+  <div class="modal-h">Validar retirada</div>
+  <div class="modal-b">
+    <div class="row-1">
+      <label>
+        <span>Selecione o estabelecimento</span>
+        <select id="redeem-partner">
+          <option value="Mina">Mina</option>
+          <option value="Café Imigrante">Café Imigrante</option>
+        </select>
+      </label>
+      <div class="muted" style="margin-top:6px">Isso ficará registrado no voucher.</div>
+    </div>
+  </div>
+  <div class="modal-f">
+    <button class="btn secondary" onclick="closeRedeem()">Cancelar</button>
+    <button class="btn" onclick="submitRedeem()">Confirmar</button>
+  </div>
+</dialog>
+
 <script>
   // ====== AUTENTICAÇÃO ======
   const token = localStorage.getItem('hn_admin_token');
@@ -351,7 +368,7 @@
     bulkStatsParticipants: (user_ids=[]) => callApi("admin-participants", { action:"stats_bulk", user_ids }),
     
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
-    redeemVoucher: (id) => callApi("admin-vouchers",{ action:"redeem", id }),
+    redeemVoucher: (id, partner) => callApi("admin-vouchers",{ action:"redeem", id, partner }),
 
     participantsStats: (ids=[]) => callApi("admin-participants", { action:"stats_bulk", ids }),
     questionsStats: (ids=[]) => callApi("admin-questions", { action:"stats_bulk", ids }),
@@ -486,7 +503,6 @@
         });
       }
     }
-    console.debug('[question_stats_v] fetched', out.size, 'rows');
     return out;
   }
 
@@ -503,7 +519,6 @@
       }
       qEmpty.style.display = 'none';
 
-      // Stats reais via VIEW pública
       const ids = items.map(r=>r.id);
       const statsMap = await fetchQuestionStatsFromView(ids);
 
@@ -691,6 +706,7 @@
         const hits = (typeof v.first_try_hits === 'number') ? v.first_try_hits : null;
         const total = (typeof v.batch_total === 'number' && v.batch_total > 0) ? v.batch_total : null;
         const hitsCell = (hits !== null && total !== null) ? `${hits} / ${total}` : '—';
+        const partnerSafe = (v.partner||'').replace(/'/g,"\\'");
         return `
           <tr>
             <td>${esc(v.user?.nome||'')}</td>
@@ -700,7 +716,11 @@
             <td>${formatDate(v.issued_at)}</td>
             <td>${formatDate(v.expires_at)}</td>
             <td>${hitsCell}</td>
-            <td>${v.status==='pendente' ? `<button class="btn" onclick="markRedeemed('${v.id}')">Validar retirada</button>` : ''}</td>
+            <td>${
+              v.status==='pendente'
+              ? `<button class="btn" onclick="openRedeem('${v.id}','${partnerSafe}')">Validar retirada</button>`
+              : ''
+            }</td>
           </tr>
         `;
       }).join('');
@@ -709,14 +729,38 @@
     }
   }
 
-  async function markRedeemed(id){
-    if(!confirm('Confirmar validação de retirada?')) return;
+  // ====== Modal de validação com parceiro ======
+  let CURRENT_REDEEM_ID = null;
+
+  function openRedeem(id, suggestedPartner=''){
+    CURRENT_REDEEM_ID = id;
+    const dlg = document.getElementById('dlg-redeem');
+    const sel = document.getElementById('redeem-partner');
+    if (suggestedPartner) {
+      const opt = Array.from(sel.options).find(o => o.value.toLowerCase() === suggestedPartner.toLowerCase());
+      sel.value = opt ? opt.value : sel.options[0].value;
+    } else {
+      sel.value = sel.options[0].value;
+    }
+    dlg.showModal();
+  }
+
+  function closeRedeem(){
+    CURRENT_REDEEM_ID = null;
+    document.getElementById('dlg-redeem').close();
+  }
+
+  async function submitRedeem(){
+    const id = CURRENT_REDEEM_ID;
+    if(!id) return closeRedeem();
+    const partner = document.getElementById('redeem-partner').value;
     try{
-      await AdminAPI.redeemVoucher(id);
+      await AdminAPI.redeemVoucher(id, partner);
+      closeRedeem();
       loadVouchers();
       loadDash();
     }catch(err){
-      alert('Erro ao validar: '+err.message);
+      alert('Erro ao validar: '+ (err?.message || err));
     }
   }
 
