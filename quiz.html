@@ -289,12 +289,17 @@
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
+  /* ===== NOVO: base das functions ===== */
+  const FN_BASE = `${SUPABASE_URL}/functions/v1`;
+  const ANON    = SUPABASE_ANON;
+
   /* ===== Persistência local ===== */
   const LS_KEYS = {
     asked: 'hn_asked_ids',
     ans1:  'hn_answered_total',
     done:  'hn_total_concluidas',
-    queue: 'hn_submit_queue'
+    queue: 'hn_submit_queue',
+    voucher: 'hn_voucher_code'     // 👈 guarda o código do 1º voucher
   };
   function lsGetJSON(k, fallback){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(_){ return fallback; } }
   function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
@@ -355,13 +360,6 @@
   const submitQueue = lsGetJSON(LS_KEYS.queue, []); // fila offline de submissions
 
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
-  const fmtDateISO = (d)=>d.toISOString();
-  function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
-  function formatVoucherCode(){
-    const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const p=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join("");
-    return `HN100–${p(4)}-${p(4)}`;
-  }
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
@@ -397,7 +395,7 @@
            msg.includes('duplicate key') ||
            msg.includes('unique') ||
            msg.includes('violates unique constraint') ||
-           msg.includes('ux_submissions_user_question'); // ajuste ao nome da sua constraint se diferente
+           msg.includes('ux_submissions_user_question');
   }
 
   /* ===== Fila offline de submissões ===== */
@@ -407,7 +405,7 @@
   }
   async function flushQueueOnce(){
     if(!submitQueue.length) return;
-    const copy = submitQueue.slice(0, 10); // processa em blocos
+    const copy = submitQueue.slice(0, 10);
     for(const item of copy){
       try{
         const { error } = await withTimeout(
@@ -416,18 +414,16 @@
         );
         if(error){
           if (isUniqueViolation(error)) {
-            // <<< já está gravado — consideramos sucesso e removemos da fila
             const idx = submitQueue.indexOf(item);
             if(idx > -1) submitQueue.splice(idx,1);
             continue;
           }
           throw error;
         }
-        // sucesso — remove
         const idx = submitQueue.indexOf(item);
         if(idx > -1) submitQueue.splice(idx,1);
       }catch(_){
-        // mantém na fila para próxima tentativa
+        // mantém para próxima
       }
     }
     lsSetJSON(LS_KEYS.queue, submitQueue);
@@ -441,48 +437,40 @@
 
   /* ===== INSERT RESILIENTE E IDEMPOTENTE ===== */
   async function insertSubmission({ user_id, question_id, first_try_correct }){
-    const payload = { user_id, question_id, first_try_correct, answered_at: fmtDateISO(new Date()) };
+    const payload = { user_id, question_id, first_try_correct, answered_at: new Date().toISOString() };
     try{
       const fn = async()=> {
         const { error } = await withTimeout(client.from('submissions').insert(payload), 6000,'insertSubmission');
         if (error) {
-          if (isUniqueViolation(error)) return true; // <<< já inserido (click duplo ou retry): OK
+          if (isUniqueViolation(error)) return true;
           throw error;
         }
         return true;
       };
       return await retry(fn, { tries: 2, baseDelay: 500, label: 'insertSubmission' });
     }catch(e){
-      // Falhou diferente de unique: guarda para reenvio
       queueSubmission(payload);
       return false;
     }
   }
 
-  /* (1) prazo fixo 30/11 para todos */
-  function getFixedDeadline(){
-    const now = new Date();
-    const y = now.getFullYear();
-    return new Date(y, 10, 30, 23, 59, 59);
-  }
-
-  async function ensureVoucher(user_id){
-    let code = formatVoucherCode();
-    const issuedAt = new Date();
-    const expiresAt = getFixedDeadline();
-    for(let i=0;i<5;i++){
-      const { error } = await withTimeout(
-        client.from('vouchers').insert({
-          user_id, code, status:'pendente',
-          issued_at:fmtDateISO(issuedAt), expires_at:fmtDateISO(expiresAt),
-          partner:'Parceiros do projeto'
-        }),
-        6000,'ensureVoucher.insert'
-      ).catch(e=>({ error:e }));
-      if(!error) return { code, issuedAt, expiresAt };
-      if(String((error.message||'') + '').toLowerCase().includes('duplicate')){ code = formatVoucherCode(); continue; }
+  /* ===== NOVO: emitir/obter voucher via Edge Function (idempotente) ===== */
+  async function issueVoucher(user_id){
+    const res = await fetch(`${FN_BASE}/admin-vouchers`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + ANON,
+        "apikey": ANON
+      },
+      body: JSON.stringify({ action: "issue", user_id })
+    });
+    let json = {};
+    try { json = await res.json(); } catch(_) {}
+    if (!res.ok || !json.ok || !json.voucher) {
+      throw new Error(json?.error || "Falha ao emitir voucher");
     }
-    return { code, issuedAt, expiresAt };
+    return json.voucher; // { code, issued_at, expires_at, partner }
   }
 
   function updateProgress(){
@@ -511,7 +499,7 @@
     try{
       const q = batch[idxInBatch];
       if(!q){ showFinal(); return; }
-      if(!questionIsValid(q)){ // pula inválidas silenciosamente
+      if(!questionIsValid(q)){
         idxInBatch++;
         if(idxInBatch >= batch.length){ showFinal(); return; }
         return renderQuestion();
@@ -630,7 +618,7 @@
 
     if(batch.length === 0){ showFinal(); return; }
     showView('quiz');
-    enableExitProtection();   // protege contra sair/atualizar durante o lote
+    enableExitProtection();
     renderQuestion();
   }
 
@@ -644,7 +632,7 @@
       );
       if(error) throw error;
       const filtered = (data||[]).filter(q => questionIsValid(q));
-      return shuffle(filtered);
+      return filtered.sort(() => Math.random() - 0.5);
     };
     try{
       return await retry(fetchOnce, { tries: 3, baseDelay: 700, label: 'loadAllQuestions' });
@@ -670,20 +658,16 @@
     }
   }
 
-  /* ====== DOWNLOAD EM NOVA GUIA SEM REDIRECIONAR A ATUAL ====== */
+  /* ====== DOWNLOAD em nova guia ====== */
   (function wireDownloadLogging(){
     const a = document.getElementById('btnDownload') || document.getElementById('btndownload');
     if (!a) return;
-    markSafeNavigation(a); // não mostra o prompt de saída
+    markSafeNavigation(a);
     a.addEventListener('click', async (ev) => {
-      ev.preventDefault(); // impede navegação na guia atual
+      ev.preventDefault();
       const href = a.getAttribute('href') || '';
       if (!/^https?:\/\//i.test(href)) return;
-
-      // abre em nova guia SEM mexer na guia atual
       window.open(href, '_blank', 'noopener');
-
-      // registra o download (não bloqueante para o usuário)
       try {
         const user_id = localStorage.getItem('hn_user_id') || null;
         await logDownload({ user_id, url: href });
@@ -691,7 +675,7 @@
     }, { passive:false });
   })();
 
-  /* ===== RANKING (via RPC) ===== */
+  /* ===== RANKING ===== */
   async function updateRankingConsent(accepted){
     try{
       if(!userId){ throw new Error("Sem userId para consentimento."); }
@@ -716,7 +700,6 @@
     }
   }
 
-  // Busca direto na view (sem Edge Function), ordenado por acertos de 1ª
   async function fetchLeaderboard(top = 50){
     try{
       const { data, error } = await client
@@ -724,7 +707,6 @@
         .select('id,nome,first_try_hits,total_answered')
         .order('first_try_hits', { ascending:false })
         .limit(top);
-
       if (error) throw error;
       return Array.isArray(data) ? data : [];
     }catch(e){
@@ -732,18 +714,15 @@
     }
   }
 
-  // garante que quem acabou de consentir apareça mesmo fora do TOP inicial
   async function ensureSelfInList(items){
     try{
       if(!userId) return items;
       if(items.some(r => r.id === userId)) return items;
-
       const { data, error } = await client
         .from('public_leaderboard_v')
         .select('id,nome,first_try_hits,total_answered')
         .eq('id', userId)
         .maybeSingle();
-
       if(!error && data){
         return [...items, data]
           .sort((a,b)=>(b.first_try_hits||0)-(a.first_try_hits||0))
@@ -756,7 +735,6 @@
   function renderLeaderboard(rows){
     const sorted = [...rows].sort((a,b)=>(b.first_try_hits||0) - (a.first_try_hits||0));
     const tbody = els.lbRows;
-
     if(!sorted.length){
       tbody.innerHTML = `<tr><td colspan="3" style="padding:10px;color:#666">Sem classificados ainda.</td></tr>`;
     }else{
@@ -775,38 +753,46 @@
       dbgLog('showFinal.start', { answeredTotal, batchCorrect, batchLen: batch.length });
       dbgState('🏁 final');
 
-      disableExitProtection(); // terminou o lote: não mostrar prompt
+      disableExitProtection();
       showView('final');
 
       els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
-      const primeiroLote = !window.__voucherIssued;
       const totalRespondidas = askedIds.size;
       const totalAtivas = allQuestions.length;
       const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
 
       const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
 
-      if (primeiroLote) {
+      /* ===== NOVO: voucher sempre visível no final ===== */
+      let codeFromLS = localStorage.getItem(LS_KEYS.voucher);
+      let isFirstVoucher = !codeFromLS; // se não há no LS, é o 1º lote concluído
+
+      if (isFirstVoucher) {
+        // Primeiro lote concluído: emitir (ou retornar existente) via Edge
         renderPartners();
         els.partnersRow.style.display = 'flex';
-
-        let voucher;
-        try { voucher = await withTimeout(ensureVoucher(userId), 6000, 'ensureVoucher'); }
-        catch (e) { voucher = { code: formatVoucherCode(), issuedAt: new Date(), expiresAt: getFixedDeadline() }; }
-
-        els.voucherCode.textContent = voucher.code;
-        els.voucherValidity.textContent = instruction;
-        window.__voucherIssued = true;
-
+        try {
+          const voucher = await withTimeout(issueVoucher(userId), 8000, 'issueVoucher');
+          codeFromLS = voucher.code;
+          localStorage.setItem(LS_KEYS.voucher, codeFromLS);
+          els.voucherCode.textContent = codeFromLS;
+          els.voucherValidity.textContent = instruction;
+          window.__voucherIssued = true;
+        } catch (e) {
+          els.voucherCode.textContent = '— gerando, tente novamente —';
+          els.voucherValidity.textContent = 'Não foi possível gerar o código agora. Tente novamente em alguns instantes.';
+        }
         els.voucherBox.style.display = 'block';
         els.downloadRow.style.display = 'none';
-
         els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
         els.finalSubtitle.textContent = instruction;
       } else {
+        // Lotes seguintes: mostrar o mesmo código guardado
         els.partnersRow.style.display = 'none';
-        els.voucherBox.style.display = 'none';
+        els.voucherBox.style.display = 'block';            // 👈 mantém visível
+        els.voucherCode.textContent = codeFromLS;
+        els.voucherValidity.textContent = instruction;
         els.downloadRow.style.display = 'none';
         els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
         els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
@@ -878,13 +864,13 @@
       const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
       els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
 
-      dbgLog('showFinal.done', { voucherIssued: !!window.__voucherIssued, remaining });
+      dbgLog('showFinal.done', { voucherShown: true, remaining });
 
     }catch(e){
       dbgLog('showFinal.error', { error: String(e) });
       reportErrorToSupabase(e);
       els.finalTitle.textContent = 'Concluído! 🎉';
-      els.finalSubtitle.textContent = 'Seu código pode demorar um pouco, tente novamente em alguns instantes.';
+      els.finalSubtitle.textContent = 'Tivemos uma instabilidade. Tente novamente em instantes.';
       showView('final');
     }
   }
@@ -919,7 +905,7 @@
 
   els.btnContinue?.addEventListener('click', ()=>{
     showView('quiz');
-    startBatch();           // startBatch já liga a proteção
+    startBatch();
   });
 
   async function reportErrorToSupabase(err) {
@@ -931,9 +917,7 @@
         current_question: idxInBatch + 1,
         useragent: navigator.userAgent, current_url: location.href
       });
-    } catch (logErr) {
-      // silencioso
-    }
+    } catch (_) {}
   }
   window.addEventListener("error", (ev) => {
     const payload = ev.error || { message: ev.message || 'Erro de janela' };
@@ -949,13 +933,13 @@
       userId = localStorage.getItem('hn_user_id');
       if(!userId){ location.replace('signup.html'); return; }
 
-      // saídas intencionais (não mostrar prompt)
+      // saídas intencionais
       markSafeNavigation(document.getElementById('btnEnd'));
       markSafeNavigation(document.getElementById('btnHN'));
       markSafeNavigation(document.getElementById('btnShare'));
       markSafeNavigation(document.getElementById('btnDownload'));
 
-      scheduleQueueFlusher(); // inicia reenvio de fila offline
+      scheduleQueueFlusher();
 
       allQuestions = await loadAllQuestions();
       if(!allQuestions.length){
@@ -963,21 +947,31 @@
         els.options.innerHTML='';
         els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
         disableExitProtection();
-        // Mesmo assim deixa o usuário ver final suave
         showView('final');
         els.finalTitle.textContent = 'Ops! Sem perguntas ativas agora';
         els.finalSubtitle.textContent = 'Tente novamente em alguns minutos.';
         els.continueRow.style.display='none';
+
+        // ainda assim exibe voucher se já existir (para informar usuário)
+        const codeFromLS = localStorage.getItem(LS_KEYS.voucher);
+        if (codeFromLS){
+          els.voucherBox.style.display='block';
+          els.voucherCode.textContent = codeFromLS;
+        }
         return;
       }
       startBatch();
     }catch(e){
       reportErrorToSupabase(e);
-      // fallback seguro
       disableExitProtection();
       showView('final');
       els.finalTitle.textContent = 'Concluído!';
       els.finalSubtitle.textContent = 'Tivemos uma instabilidade. Tente continuar em instantes.';
+      const codeFromLS = localStorage.getItem(LS_KEYS.voucher);
+      if (codeFromLS){
+        els.voucherBox.style.display='block';
+        els.voucherCode.textContent = codeFromLS;
+      }
     }
   })();
 </script>
