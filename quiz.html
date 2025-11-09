@@ -502,7 +502,6 @@
       return { code: VOUCHER_PLACEHOLDER, status: 'manual', issued_at: new Date().toISOString(), user_id };
     }
     try{
-      // 1) tenta pegar voucher já emitido para o usuário (idempotência no front também)
       const { data: got } = await client
         .from('vouchers')
         .select('id, code, status, issued_at, expires_at, partner, user_id')
@@ -513,7 +512,6 @@
       const row0 = Array.isArray(got) ? got[0] : got;
       if (row0 && row0.code) return row0;
 
-      // 2) emite via wrapper pública (p_user uuid)
       const { data, error } = await client.rpc('issue_voucher_for_user_public', { p_user: user_id });
       if (error) throw new Error(error.message || 'RPC error');
       const row = Array.isArray(data) ? data[0] : data;
@@ -836,11 +834,15 @@
 
         els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
 
-        const totalRespondidas = askedIds.size;
-        const totalAtivas = allQuestions.length;
-        const remainingAll = allQuestions.filter(q => !askedIds.has(q.id)).length;
-        const capLeft = Math.max(0, SESSION_CAP - sessAnswered);
-        const isSessionEnd = (capLeft <= 0);
+        // ---- CONTADORES CORRIGIDOS POR SESSÃO ----
+        const totalPermitidas   = Math.min(SESSION_CAP, allQuestions.length);           // máx. 50 ou total de ativas
+        const respondidasSessao = Math.min(sessAnswered, totalPermitidas);              // progresso desta sessão
+        const faltamSessao      = Math.max(0, totalPermitidas - respondidasSessao);     // quanto falta nesta sessão
+
+        // Para controle de fluxo (continuar x encerrar)
+        const remainingAll = allQuestions.filter(q => !askedIds.has(q.id)).length;      // perguntas ativas não respondidas (lifetime)
+        const capLeft       = Math.max(0, totalPermitidas - respondidasSessao);
+        const isSessionEnd  = (capLeft <= 0);
 
         renderPartners();
         els.voucherBox.style.display = 'block';
@@ -854,8 +856,9 @@
             const code = voucher && voucher.code ? voucher.code : VOUCHER_PLACEHOLDER;
             localStorage.setItem(LS_KEYS.voucher, code);
             els.voucherCode.textContent = code;
-            els.voucherValidity.textContent = (code && code !== VOUCHER_PLACEHOLDER) ? VOUCHER_INSTRUCTION_SUCCESS : VOUCHER_INSTRUCTION_FALLBACK;
-            els.finalSubtitle.textContent   = (code && code !== VOUCHER_PLACEHOLDER) ? VOUCHER_INSTRUCTION_SUCCESS : VOUCHER_INSTRUCTION_FALLBACK;
+            const okCode = (code && code !== VOUCHER_PLACEHOLDER);
+            els.voucherValidity.textContent = okCode ? VOUCHER_INSTRUCTION_SUCCESS : VOUCHER_INSTRUCTION_FALLBACK;
+            els.finalSubtitle.textContent   = okCode ? VOUCHER_INSTRUCTION_SUCCESS : VOUCHER_INSTRUCTION_FALLBACK;
             els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
             els.downloadRow.style.display = 'none';
           } catch (e) {
@@ -882,11 +885,15 @@
           els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
         }
 
-        els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
+        // ---- MENSAGEM DE PROGRESSO DA SESSÃO (corrigida) ----
+        els.answeredCount.textContent =
+          faltamSessao > 0
+            ? `Você já respondeu ${respondidasSessao} de ${totalPermitidas} perguntas disponíveis. Faltam ${faltamSessao} para concluir todos os lotes.`
+            : `Você concluiu todas as ${totalPermitidas} perguntas disponíveis nesta sessão.`;
 
-        // Botões finais: respeita o CAP de 50
+        // Botões finais: agora respeita explicitamente o CAP da sessão
         els.continueRow.style.display = 'flex';
-        els.btnContinue.style.display = (remainingAll > 0 && !isSessionEnd) ? 'inline-block' : 'none';
+        els.btnContinue.style.display = (faltamSessao > 0 && remainingAll > 0) ? 'inline-block' : 'none';
 
         // Ranking / fim total (quando acabar as ativas OU atingir o CAP)
         els.lbConsent.style.display = 'none';
@@ -946,7 +953,7 @@
         const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
         els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
 
-        dbgLog('showFinal.done', { voucherShown: true, remainingAll, isSessionEnd });
+        dbgLog('showFinal.done', { voucherShown: true, remainingAll, isSessionEnd, respondidasSessao, totalPermitidas });
       }catch(e){
         dbgLog('showFinal.error', { error: String(e) });
         reportErrorToSupabase(e);
