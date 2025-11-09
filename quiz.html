@@ -508,71 +508,37 @@
     }
   }
 
-<script>
-/* ===== Voucher via RPC correta ===== */
-async function issueVoucher(user_id) {
-  if (!user_id) throw new Error("missing-user_id");
+  /* ===== Voucher via RPC (corrigido e único) ===== */
+  async function issueVoucher(user_id) {
+    if (!user_id) throw new Error("missing-user_id");
 
-  // idempotência: se já existe, retorna o último
-  try {
-    const { data: got } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-    const row = Array.isArray(got) ? got[0] : got;
-    if (row && row.code) return row;
-  } catch (_) {}
-
-  // chama a nova RPC criada no banco
-  const { data, error } = await client.rpc('rpc_issue_voucher_for_user', {
-    p_user_id: user_id
-  });
-
-  if (error) {
-    throw new Error(`voucher-rpc-erro: ${error.message || JSON.stringify(error)}`);
-  }
-
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || !row.code) {
-    throw new Error('voucher-rpc-sem-codigo');
-  }
-  return row;
-}
-</script>
-
-
-  // 1) ÚNICO RPC suportado: issue_voucher_for_user(p_user_id uuid) -> vouchers
-  let lastErr = null;
-  try {
-    const { data, error } = await client.rpc('rpc_issue_voucher_for_user', { user_id });
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row && row.code) return row;
-    lastErr = new Error('RPC returned no voucher row');
-  } catch (e) {
-    lastErr = e;
-  }
-
-  // 2) Corrida de concorrência: checa se o voucher foi criado mesmo com erro de rede
-  try {
-    const { data: got2, error: gotErr2 } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-
-    if (!gotErr2) {
-      const row = Array.isArray(got2) ? got2[0] : got2;
+    // idempotência: se já existe, retorna o último
+    try {
+      const { data: got } = await client
+        .from('vouchers')
+        .select('id, code, status, issued_at, expires_at, partner')
+        .eq('user_id', user_id)
+        .order('issued_at', { ascending: false })
+        .limit(1);
+      const row = Array.isArray(got) ? got[0] : got;
       if (row && row.code) return row;
-    }
-  } catch (_) {}
+    } catch (_) {}
 
-  const detail = (lastErr && (lastErr.message || lastErr.error_description || lastErr.hint || JSON.stringify(lastErr))) || 'voucher RPC indisponível';
-  throw new Error(`voucher-failed: ${detail}`);
-}
+    // chama a RPC correta com o parâmetro certo
+    const { data, error } = await client.rpc('rpc_issue_voucher_for_user', {
+      p_user_id: user_id
+    });
+
+    if (error) {
+      throw new Error(`voucher-rpc-erro: ${error.message || JSON.stringify(error)}`);
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || !row.code) {
+      throw new Error('voucher-rpc-sem-codigo');
+    }
+    return row;
+  }
 
   function updateProgress(){
     const total = Math.max(batch.length,1);
