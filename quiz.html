@@ -171,14 +171,14 @@
         </div>
 
         <h2 id="finalTitle" style="margin:6px 0 6px;font-size:clamp(20px,4vw,26px)">Parabéns! Você concluiu o Quiz 🎉</h2>
-        <p id="finalSubtitle">Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.</p>
+        <p id="finalSubtitle">Apresente um documento com foto para retirar.</p>
 
         <div class="partners" id="partnersRow" aria-label="Parceiros para retirada"></div>
 
         <div id="voucherBox" class="voucher">
           <h3>Seu código de retirada</h3>
-          <div id="voucherCode" class="code">HN100–XXXX-XXXX</div>
-          <div class="note" id="voucherValidity">Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.</div>
+          <div id="voucherCode" class="code">— leve documento com foto —</div>
+          <div class="note" id="voucherValidity">Apresente um documento com foto para retirar.</div>
         </div>
 
         <div class="btn-row" id="downloadRow" style="display:none">
@@ -259,6 +259,11 @@
   const BATCH_SIZE = 10;
   const SESSION_CAP = 50; // ====== 5 lotes (10x5) ======
   const LEADERBOARD_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/rapid-function";
+
+  // ====== MODO PROVISÓRIO SEM RPC DE VOUCHER ======
+  const ISSUE_VOUCHER = false; // manter false até corrigir a RPC
+  const VOUCHER_FALLBACK_NOTE = 'Apresente um documento com foto para retirar.';
+  const VOUCHER_PLACEHOLDER   = '— leve documento com foto —';
 
   const PARTNERS = [
     { name: "Mina Café & Vinho - Praça do Congresso (Centro)", url: "https://www.instagram.com/minacafevinho/" },
@@ -490,28 +495,10 @@
     }
   }
 
-  /* ===== Voucher via RPC (simplificada, sem args) ===== */
+  /* ===== Voucher (stub provisório sem RPC) ===== */
   async function issueVoucher(user_id) {
-    if (!user_id) throw new Error("missing-user_id");
-
-    // Idempotência: tenta pegar o mais recente já emitido
-    try {
-      const { data: got } = await client
-        .from('vouchers')
-        .select('id, code, status, issued_at, expires_at, partner, user_id')
-        .eq('user_id', user_id)
-        .order('issued_at', { ascending: false })
-        .limit(1);
-      const row0 = Array.isArray(got) ? got[0] : got;
-      if (row0 && row0.code) return row0;
-    } catch (_) {}
-
-    // Chamada única à função pública sem parâmetros (usa auth.uid() no backend)
-    const { data, error } = await client.rpc('issue_voucher_for_user');
-    if (error) throw new Error(`voucher-failed: ${error.message || 'RPC error'}`);
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row || !row.code) throw new Error('voucher-sem-code');
-    return row;
+    // Provisório: não chama RPC, apenas retorna placeholder e registra local
+    return { code: VOUCHER_PLACEHOLDER, status: 'manual', issued_at: new Date().toISOString(), user_id };
   }
 
   function updateProgress(){
@@ -823,46 +810,43 @@
         const capLeft = Math.max(0, SESSION_CAP - sessAnswered);
         const isSessionEnd = (capLeft <= 0);
 
-        const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
+        // Mensagem provisória do voucher
+        const instruction = VOUCHER_FALLBACK_NOTE;
 
         let codeFromLS = localStorage.getItem(LS_KEYS.voucher);
         let isFirstVoucher = !codeFromLS;
 
+        // Sempre mostra parceiros
+        renderPartners();
+
+        // Mostra voucher sempre, com placeholder quando necessário — sem RPC
+        els.voucherBox.style.display = 'block';
+        els.voucherValidity.textContent = instruction;
+
         if (isFirstVoucher) {
-          renderPartners();
-          els.partnersRow.style.display = 'flex';
           try {
-            const voucher = await withTimeout(issueVoucher(userId), 10000, 'issueVoucher');
-            const code = voucher && voucher.code ? voucher.code : null;
-            if (!code) throw new Error('voucher-sem-code');
+            const voucher = ISSUE_VOUCHER ? await withTimeout(issueVoucher(userId), 10000, 'issueVoucher') : { code: VOUCHER_PLACEHOLDER };
+            const code = voucher && voucher.code ? voucher.code : VOUCHER_PLACEHOLDER;
             localStorage.setItem(LS_KEYS.voucher, code);
             els.voucherCode.textContent = code;
-            els.voucherValidity.textContent = instruction;
-            window.__voucherIssued = true;
           } catch (e) {
-            const msg = (e && e.message) ? e.message : String(e);
-            els.voucherCode.textContent = '— erro ao gerar —';
-            els.voucherValidity.textContent = 'Não foi possível gerar o código agora.';
+            els.voucherCode.textContent = VOUCHER_PLACEHOLDER;
             try {
               await client.from('client_logs').insert({
                 user_id: userId || null,
-                message: 'voucher-issue-failed',
-                stack: msg,
+                message: 'voucher-issue-skipped',
+                stack: 'RPC desativada provisoriamente',
                 current_question: idxInBatch + 1,
                 useragent: navigator.userAgent,
                 current_url: location.href
               });
             } catch (_) {}
           }
-          els.voucherBox.style.display = 'block';
           els.downloadRow.style.display = 'none';
           els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
           els.finalSubtitle.textContent = instruction;
         } else {
-          els.partnersRow.style.display = 'none';
-          els.voucherBox.style.display = 'block';
-          els.voucherCode.textContent = codeFromLS;
-          els.voucherValidity.textContent = instruction;
+          els.voucherCode.textContent = codeFromLS || VOUCHER_PLACEHOLDER;
           els.downloadRow.style.display = 'none';
           els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
           els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
