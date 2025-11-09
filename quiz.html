@@ -451,24 +451,49 @@
     }
   }
 
- /* ===== NOVO: emitir/obter voucher via RPC (idempotente) ===== */
+ /* ===== NOVO: emitir/obter voucher via RPC (idempotente) com fallbacks e diagnóstico ===== */
 async function issueVoucher(user_id){
   if (!user_id) throw new Error("missing-user_id");
 
-  // 1) tenta a função nova: issue_voucher_for_user(p_user_id uuid)
+  // 1) Função nova
   try{
     const { data, error } = await client.rpc('issue_voucher_for_user', { p_user_id: user_id });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
-    if (row && row.code) return row;               // { id, code, status, issued_at, expires_at, partner, ... }
-    throw new Error('no-code-returned');
-  }catch(e1){
-    // 2) fallback p/ função antiga: issue_voucher_once(p_user uuid, p_partner text)
-    const { data: oldData, error: e2 } = await client.rpc('issue_voucher_once', { p_user: user_id, p_partner: null });
-    if (e2) throw new Error(`rpc-new-failed: ${(e1 && e1.message) || e1}; rpc-old-failed: ${e2.message}`);
-    const row = Array.isArray(oldData) ? oldData[0] : oldData;
     if (row && row.code) return row;
-    throw new Error('no-code-returned');
+    throw new Error('no-code-returned:new');
+  }catch(e1){
+    // 2) Função antiga (retrocompat)
+    try{
+      const { data: oldData, error: e2 } = await client.rpc('issue_voucher_once', { p_user: user_id, p_partner: null });
+      if (e2) throw e2;
+      const row = Array.isArray(oldData) ? oldData[0] : oldData;
+      if (row && row.code) return row;
+      throw new Error('no-code-returned:old');
+    }catch(e2){
+      // 3) Fallback: tentar ler um voucher já emitido para o usuário
+      try{
+        const { data: got, error: e3 } = await client
+          .from('vouchers')
+          .select('id, code, status, issued_at, expires_at, partner')
+          .eq('user_id', user_id)
+          .order('issued_at', { ascending: false })
+          .limit(1);
+        if (e3) throw e3;
+        const row = Array.isArray(got) ? got[0] : got;
+        if (row && row.code) return row;
+
+        // Se chegou aqui, não temos como exibir um código e precisamos mostrar o diagnóstico
+        const m1 = (e1 && (e1.message || String(e1))) || 'e1';
+        const m2 = (e2 && (e2.message || String(e2))) || 'e2';
+        throw new Error(`voucher-failed: rpc-new="${m1}" rpc-old="${m2}" select-empty`);
+      }catch(e3){
+        const m1 = (e1 && (e1.message || String(e1))) || 'e1';
+        const m2 = (e2 && (e2.message || String(e2))) || 'e2';
+        const m3 = (e3 && (e3.message || String(e3))) || 'e3';
+        throw new Error(`voucher-failed: rpc-new="${m1}" rpc-old="${m2}" select-failed="${m3}"`);
+      }
+    }
   }
 }
 
@@ -927,10 +952,18 @@ async function issueVoucher(user_id){
     reportErrorToSupabase(payload);
   });
 
-  (async function init(){
-    try{
-      userId = localStorage.getItem('hn_user_id');
-      if(!userId){ location.replace('signup.html'); return; }
+ (async function init(){
+  try{
+    // 🔒 Se esta navegação for um reload (F5/refresh), volta para a index
+    const nav = (performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation')[0] : null;
+    const isReload = nav ? (nav.type === 'reload') : (performance && performance.navigation && performance.navigation.type === 1);
+    if (isReload) {
+      // limpa o "protege sair" para não aparecer alerta do beforeunload
+      disableExitProtection();
+      location.replace('index.html');
+      return;
+    }
+
 
       // saídas intencionais
       markSafeNavigation(document.getElementById('btnEnd'));
