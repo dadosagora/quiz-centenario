@@ -131,7 +131,7 @@
     #continueRow #btnContinue:hover { filter: brightness(1.05); transform: translateY(-1px); }
     @media (max-width: 640px){
       #continueRow{ flex-direction: column; align-items: stretch; }
-      #continueRow #btnContinue{ width: 100%; font-size: 20px; padding: 18px 30px; }
+      #continueRow #btnContinue{ width: 100%; font-size: 20%; padding: 18px 30px; }
     }
   </style>
 </head>
@@ -419,104 +419,80 @@
     window.addEventListener('online', flushQueueOnce);
   }
 
- async function insertSubmission({ user_id, question_id, first_try_correct }) {
-  const payload = {
-    user_id,
-    question_id,
-    first_try_correct,
-    answered_at: new Date().toISOString()
-  };
+  async function insertSubmission({ user_id, question_id, first_try_correct }) {
+    const payload = { user_id, question_id, first_try_correct, answered_at: new Date().toISOString() };
+    try {
+      const { error } = await client
+        .from('submissions')
+        .upsert(payload, { onConflict: 'user_id,question_id', ignoreDuplicates: true });
 
-  try {
-    // upsert idempotente baseado na unique (user_id, question_id)
-    const { error } = await client
-      .from('submissions')
-      .upsert(payload, {
-        onConflict: 'user_id,question_id',
-        ignoreDuplicates: true
-      });
-
-    if (error) {
-      // Em alguns ambientes o erro vem como 409 genérico
-      const msg = (error.message || '').toLowerCase();
-      const det = (error.details || '').toLowerCase();
-      if (
-        error.code === '23505' ||
-        msg.includes('duplicate') ||
-        msg.includes('unique') ||
-        det.includes('duplicate') ||
-        det.includes('unique') ||
-        msg.includes('conflict')
-      ) {
-        // tratar como OK (idempotência)
-        return true;
+      if (error) {
+        const msg = (error.message || '').toLowerCase();
+        const det = (error.details || '').toLowerCase();
+        if (error.code === '23505' || msg.includes('duplicate') || msg.includes('unique') || det.includes('duplicate') || det.includes('unique') || msg.includes('conflict')) {
+          return true;
+        }
+        throw error;
       }
-      throw error;
+      return true;
+    } catch (e) {
+      queueSubmission(payload);
+      return false;
     }
-    return true;
-  } catch (e) {
-    // Fila offline como fallback
-    queueSubmission(payload);
-    return false;
   }
-}
-
 
   /* ===== Voucher via RPC com fallbacks e diagnóstico ===== */
   async function issueVoucher(user_id) {
-  if (!user_id) throw new Error("missing-user_id");
+    if (!user_id) throw new Error("missing-user_id");
 
-  // 0) Tenta obter um voucher já existente (idempotência)
-  try {
-    const { data: got, error: gotErr } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-    if (!gotErr) {
-      const row = Array.isArray(got) ? got[0] : got;
-      if (row && row.code) return row;
-    }
-  } catch (_) {}
-
-  // 1) Tenta RPC com nomes de parâmetro mais comuns
-  const paramVariants = [
-    { fn: 'issue_voucher_for_user', args: { p_user_id: user_id } },
-    { fn: 'issue_voucher_for_user', args: { user_id: user_id } },
-    { fn: 'issue_voucher_for_user', args: { p_user: user_id } },
-    // legado (se existir)
-    { fn: 'issue_voucher_once', args: { p_user: user_id, p_partner: null } }
-  ];
-
-  let lastErr = null;
-  for (const v of paramVariants) {
+    // 0) Idempotência: se já existir, retorna
     try {
-      const { data, error } = await client.rpc(v.fn, v.args);
-      if (error) { lastErr = error; continue; }
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row && row.code) return row;
-    } catch (e) { lastErr = e; }
-  }
+      const { data: got, error: gotErr } = await client
+        .from('vouchers')
+        .select('id, code, status, issued_at, expires_at, partner')
+        .eq('user_id', user_id)
+        .order('issued_at', { ascending: false })
+        .limit(1);
+      if (!gotErr) {
+        const row = Array.isArray(got) ? got[0] : got;
+        if (row && row.code) return row;
+      }
+    } catch (_) {}
 
-  // 2) Último fallback: checar novamente se apareceu um voucher (corrida de concorrência)
-  try {
-    const { data: got2, error: gotErr2 } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-    if (!gotErr2) {
-      const row = Array.isArray(got2) ? got2[0] : got2;
-      if (row && row.code) return row;
+    // 1) RPC (variações de parâmetros)
+    const paramVariants = [
+      { fn: 'issue_voucher_for_user', args: { p_user_id: user_id } },
+      { fn: 'issue_voucher_for_user', args: { user_id: user_id } },
+      { fn: 'issue_voucher_for_user', args: { p_user: user_id } },
+      { fn: 'issue_voucher_once',     args: { p_user: user_id, p_partner: null } }
+    ];
+    let lastErr = null;
+    for (const v of paramVariants) {
+      try {
+        const { data, error } = await client.rpc(v.fn, v.args);
+        if (error) { lastErr = error; continue; }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && row.code) return row;
+      } catch (e) { lastErr = e; }
     }
-  } catch (_) {}
 
-  // 3) Se nada deu, propaga um erro legível (não quebra a tela)
-  const msg = lastErr?.message || String(lastErr) || 'voucher RPC indisponível';
-  throw new Error(`voucher-failed: ${msg}`);
-}
+    // 2) Corrida de concorrência: checa de novo
+    try {
+      const { data: got2, error: gotErr2 } = await client
+        .from('vouchers')
+        .select('id, code, status, issued_at, expires_at, partner')
+        .eq('user_id', user_id)
+        .order('issued_at', { ascending: false })
+        .limit(1);
+      if (!gotErr2) {
+        const row = Array.isArray(got2) ? got2[0] : got2;
+        if (row && row.code) return row;
+      }
+    } catch (_) {}
+
+    const msg = lastErr?.message || String(lastErr) || 'voucher RPC indisponível';
+    throw new Error(`voucher-failed: ${msg}`);
+  }
 
   function updateProgress(){
     const total = Math.max(batch.length,1);
@@ -790,142 +766,174 @@
     els.leaderboard.style.display = 'block';
   }
 
-  async function showFinal(){
-    try{
-      dbgLog('showFinal.start', { answeredTotal, batchCorrect, batchLen: batch.length });
-      dbgState('🏁 final');
+  /* ===== NOVO: hidratar progresso a partir do servidor e “namespacing” por usuário ===== */
+  async function hydrateProgressFromServer(user_id){
+    // 1) Carrega submissions do usuário
+    const { data: subs, error } = await client
+      .from('submissions')
+      .select('question_id, first_try_correct')
+      .eq('user_id', user_id)
+      .order('answered_at', { ascending: true });
 
-      disableExitProtection();
-      showView('final');
-
-      els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
-
-      const totalRespondidas = askedIds.size;
-      const totalAtivas = allQuestions.length;
-      const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
-
-      const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
-
-      /* voucher sempre visível no final */
-      let codeFromLS = localStorage.getItem(LS_KEYS.voucher);
-      let isFirstVoucher = !codeFromLS;
-
-      if (isFirstVoucher) {
-        renderPartners();
-        els.partnersRow.style.display = 'flex';
-        try {
-          const voucher = await withTimeout(issueVoucher(userId), 10000, 'issueVoucher');
-          const code = voucher && voucher.code ? voucher.code : null;
-          if (!code) throw new Error('voucher-sem-code');
-          localStorage.setItem(LS_KEYS.voucher, code);
-          els.voucherCode.textContent = code;
-          els.voucherValidity.textContent = instruction;
-          window.__voucherIssued = true;
-        } catch (e) {
-          const msg = (e && e.message) ? e.message : String(e);
-          els.voucherCode.textContent = '— erro ao gerar —';
-          els.voucherValidity.textContent = 'Não foi possível gerar o código agora.';
-          try {
-            await client.from('client_logs').insert({
-              user_id: userId || null,
-              message: 'voucher-issue-failed',
-              stack: msg,
-              current_question: idxInBatch + 1,
-              useragent: navigator.userAgent,
-              current_url: location.href
-            });
-          } catch (_) {}
-        }
-        els.voucherBox.style.display = 'block';
-        els.downloadRow.style.display = 'none';
-        els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
-        els.finalSubtitle.textContent = instruction;
-      } else {
-        // ✅ próximos lotes: reapresenta o mesmo código
-        els.partnersRow.style.display = 'none';
-        els.voucherBox.style.display = 'block';
-        els.voucherCode.textContent = codeFromLS;
-        els.voucherValidity.textContent = instruction;
-        els.downloadRow.style.display = 'none';
-        els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
-        els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
-      }
-
-      els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
-
-      els.continueRow.style.display = 'flex';
-      els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
-
-      // Último lote concluído
-      els.lbConsent.style.display = 'none';
-      els.leaderboard.style.display = 'none';
-
-      if (remaining === 0) {
-        if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
-          els.btnDownload.href = PDF_URL;
-          els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
-          els.downloadRow.style.display = 'flex';
-        }
-        els.finalTitle.textContent = 'Você concluiu todas as perguntas! 🎉';
-        els.finalSubtitle.textContent = instruction;
-        els.overallText.textContent = `${answeredTotal} / ${totalConcluidas}`;
-        els.overallBox.style.display = 'block';
-
-        // Consentimento + exibição de ranking
-        els.lbConsent.style.display = 'block';
-        els.lbMsg.textContent = 'Para aparecer no ranking público, marque a opção e salve.';
-        els.lbAccept.checked = false;
-
-        els.lbSave.onclick = async ()=>{
-          els.lbSave.disabled = true; els.lbSkip.disabled = true; els.lbMsg.textContent = '';
-          if(!els.lbAccept.checked){
-            els.lbMsg.textContent = 'Marque a autorização para exibir seu nome no ranking.';
-            els.lbSave.disabled = false; els.lbSkip.disabled = false;
-            return;
-          }
-          try{
-            const ok = await updateRankingConsent(true);
-            if(!ok) throw new Error('Não foi possível salvar sua autorização agora.');
-
-            await new Promise(r => setTimeout(r, 250));
-
-            let items = await fetchLeaderboard(50);
-            items = await ensureSelfInList(items);
-            renderLeaderboard(items);
-
-            els.lbConsent.style.display = 'none';
-          }catch(e){
-            els.lbMsg.textContent = 'Falha ao carregar o ranking. Tente novamente.';
-          }finally{
-            els.lbSave.disabled = false; els.lbSkip.disabled = false;
-          }
-        };
-
-        els.lbSkip.onclick = async ()=>{
-          els.lbConsent.style.display = 'none';
-          els.leaderboard.style.display = 'none';
-          try{ await updateRankingConsent(false); }catch(_) {}
-        };
-      } else {
-        els.overallBox.style.display = 'none';
-      }
-
-      els.progressBar.style.width = '100%';
-
-      const origin = (location && location.origin) ? location.origin : 'https://hnnoticias.com.br';
-      const shareLink = origin + '/index.html';
-      const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
-      els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
-
-      dbgLog('showFinal.done', { voucherShown: true, remaining });
-
-    }catch(e){
-      dbgLog('showFinal.error', { error: String(e) });
-      reportErrorToSupabase(e);
-      els.finalTitle.textContent = 'Concluído! 🎉';
-      els.finalSubtitle.textContent = 'Tivemos uma instabilidade. Tente novamente em instantes.';
-      showView('final');
+    if (error) {
+      try { await client.from('client_logs').insert({
+        user_id,
+        message: 'hydrateProgressFromServer failed: ' + (error.message || String(error)),
+        stack: null,
+        current_question: null,
+        useragent: navigator.userAgent,
+        current_url: location.href
+      }); } catch(_) {}
+      return;
     }
+
+    const answeredIds = Array.from(new Set((subs || []).map(s => s.question_id)));
+    const firstTryHits = (subs || []).reduce((acc, s) => acc + (s.first_try_correct ? 1 : 0), 0);
+
+    // 2) Sobrescreve estado local com a verdade do servidor
+    askedIds = new Set(answeredIds);
+    totalConcluidas = answeredIds.length;
+    answeredTotal = firstTryHits;
+
+    lsSetJSON(LS_KEYS.asked, answeredIds);
+    localStorage.setItem(LS_KEYS.done, String(totalConcluidas));
+    localStorage.setItem(LS_KEYS.ans1, String(answeredTotal));
+
+    // 3) Namespacing: amarra o localStorage ao usuário atual
+    localStorage.setItem('hn_user_scoped', user_id);
+  }
+
+  function showFinal(){
+    (async ()=>{
+      try{
+        dbgLog('showFinal.start', { answeredTotal, batchCorrect, batchLen: batch.length });
+        dbgState('🏁 final');
+
+        disableExitProtection();
+        showView('final');
+
+        els.scoreText.textContent  = `${batchCorrect} / ${batch.length}`;
+
+        const totalRespondidas = askedIds.size;
+        const totalAtivas = allQuestions.length;
+        const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
+
+        const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
+
+        let codeFromLS = localStorage.getItem(LS_KEYS.voucher);
+        let isFirstVoucher = !codeFromLS;
+
+        if (isFirstVoucher) {
+          renderPartners();
+          els.partnersRow.style.display = 'flex';
+          try {
+            const voucher = await withTimeout(issueVoucher(userId), 10000, 'issueVoucher');
+            const code = voucher && voucher.code ? voucher.code : null;
+            if (!code) throw new Error('voucher-sem-code');
+            localStorage.setItem(LS_KEYS.voucher, code);
+            els.voucherCode.textContent = code;
+            els.voucherValidity.textContent = instruction;
+            window.__voucherIssued = true;
+          } catch (e) {
+            const msg = (e && e.message) ? e.message : String(e);
+            els.voucherCode.textContent = '— erro ao gerar —';
+            els.voucherValidity.textContent = 'Não foi possível gerar o código agora.';
+            try {
+              await client.from('client_logs').insert({
+                user_id: userId || null,
+                message: 'voucher-issue-failed',
+                stack: msg,
+                current_question: idxInBatch + 1,
+                useragent: navigator.userAgent,
+                current_url: location.href
+              });
+            } catch (_) {}
+          }
+          els.voucherBox.style.display = 'block';
+          els.downloadRow.style.display = 'none';
+          els.finalTitle.textContent = 'Parabéns! Você concluiu o Quiz 🎉';
+          els.finalSubtitle.textContent = instruction;
+        } else {
+          els.partnersRow.style.display = 'none';
+          els.voucherBox.style.display = 'block';
+          els.voucherCode.textContent = codeFromLS;
+          els.voucherValidity.textContent = instruction;
+          els.downloadRow.style.display = 'none';
+          els.finalTitle.textContent = 'Ótimo! Mais um lote concluído 👏';
+          els.finalSubtitle.textContent = 'Quer seguir testando seus conhecimentos?';
+        }
+
+        els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
+
+        els.continueRow.style.display = 'flex';
+        els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
+
+        // Ranking / fim de tudo
+        els.lbConsent.style.display = 'none';
+        els.leaderboard.style.display = 'none';
+
+        if (remaining === 0) {
+          if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
+            els.btnDownload.href = PDF_URL;
+            els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
+            els.downloadRow.style.display = 'flex';
+          }
+          els.finalTitle.textContent = 'Você concluiu todas as perguntas! 🎉';
+          els.finalSubtitle.textContent = instruction;
+          els.overallText.textContent = `${answeredTotal} / ${totalConcluidas}`;
+          els.overallBox.style.display = 'block';
+
+          els.lbConsent.style.display = 'block';
+          els.lbMsg.textContent = 'Para aparecer no ranking público, marque a opção e salve.';
+          els.lbAccept.checked = false;
+
+          els.lbSave.onclick = async ()=>{
+            els.lbSave.disabled = true; els.lbSkip.disabled = true; els.lbMsg.textContent = '';
+            if(!els.lbAccept.checked){
+              els.lbMsg.textContent = 'Marque a autorização para exibir seu nome no ranking.';
+              els.lbSave.disabled = false; els.lbSkip.disabled = false;
+              return;
+            }
+            try{
+              const ok = await updateRankingConsent(true);
+              if(!ok) throw new Error('Não foi possível salvar sua autorização agora.');
+              await new Promise(r => setTimeout(r, 250));
+              let items = await fetchLeaderboard(50);
+              items = await ensureSelfInList(items);
+              renderLeaderboard(items);
+              els.lbConsent.style.display = 'none';
+            }catch(e){
+              els.lbMsg.textContent = 'Falha ao carregar o ranking. Tente novamente.';
+            }finally{
+              els.lbSave.disabled = false; els.lbSkip.disabled = false;
+            }
+          };
+
+          els.lbSkip.onclick = async ()=>{
+            els.lbConsent.style.display = 'none';
+            els.leaderboard.style.display = 'none';
+            try{ await updateRankingConsent(false); }catch(_) {}
+          };
+        } else {
+          els.overallBox.style.display = 'none';
+        }
+
+        els.progressBar.style.width = '100%';
+
+        const origin = (location && location.origin) ? location.origin : 'https://hnnoticias.com.br';
+        const shareLink = origin + '/index.html';
+        const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
+        els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
+
+        dbgLog('showFinal.done', { voucherShown: true, remaining });
+      }catch(e){
+        dbgLog('showFinal.error', { error: String(e) });
+        reportErrorToSupabase(e);
+        els.finalTitle.textContent = 'Concluído! 🎉';
+        els.finalSubtitle.textContent = 'Tivemos uma instabilidade. Tente novamente em instantes.';
+        showView('final');
+      }
+    })();
   }
 
   function showView(name){
@@ -1000,7 +1008,20 @@
         return;
       }
 
-      // saídas intencionais
+      // 🔐 Namespacing: se o local estiver “de outro usuário”, limpa chaves do quiz
+      const scoped = localStorage.getItem('hn_user_scoped');
+      if (scoped && scoped !== userId) {
+        localStorage.removeItem(LS_KEYS.asked);
+        localStorage.removeItem(LS_KEYS.ans1);
+        localStorage.removeItem(LS_KEYS.done);
+        localStorage.removeItem(LS_KEYS.queue);
+        localStorage.removeItem(LS_KEYS.voucher);
+      }
+
+      // 🧠 Sincroniza progresso a partir do servidor (fonte da verdade)
+      await hydrateProgressFromServer(userId);
+
+      // Saídas intencionais
       markSafeNavigation(document.getElementById('btnEnd'));
       markSafeNavigation(document.getElementById('btnHN'));
       markSafeNavigation(document.getElementById('btnShare'));
