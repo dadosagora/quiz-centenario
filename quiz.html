@@ -280,6 +280,52 @@
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
+  /* ====== DRENAR FILA DE CADASTRO (hn_signup_queue) NO QUIZ ====== */
+  const SIGNUP_QUEUE_KEY = 'hn_signup_queue';
+  // helpers locais para não conflitar com as versões definidas depois
+  function __lsGetJSON(k, fb){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fb; }catch(_){ return fb; } }
+  function __lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
+
+  async function __upsertUserFromQuiz(payload){
+    // upsert idempotente por whatsapp; depois busca o id oficial
+    const { data, error, status } = await client
+      .from('users')
+      .upsert(payload, { onConflict: 'whatsapp', ignoreDuplicates: true })
+      .select('id')
+      .maybeSingle();
+
+    if (error && status !== 409 && !String(error.message||'').toLowerCase().includes('duplicate')) {
+      throw error;
+    }
+    const { data: found, error: err2 } = await client
+      .from('users').select('id').eq('whatsapp', payload.whatsapp).maybeSingle();
+    if (err2) throw err2;
+    return (found?.id || data?.id || payload.id);
+  }
+
+  async function flushSignupQueueFromQuiz(){
+    const q = __lsGetJSON(SIGNUP_QUEUE_KEY, []);
+    if(!q?.length) return null;
+    const item = q[0];
+    try{
+      const realId = await __upsertUserFromQuiz(item);
+      localStorage.setItem('hn_user_id', realId);
+      q.shift(); __lsSetJSON(SIGNUP_QUEUE_KEY, q);
+      try{ await client.from('client_logs').insert({ user_id: realId, message:'signup-queue-flushed', stack:null, current_question:null, useragent:navigator.userAgent, current_url:location.href }); }catch(_){}
+      return realId;
+    }catch(_){
+      return null;
+    }
+  }
+
+  function scheduleSignupQueueFlusher(){
+    flushSignupQueueFromQuiz();
+    window.addEventListener('online', flushSignupQueueFromQuiz);
+    window.addEventListener('focus', flushSignupQueueFromQuiz);
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') flushSignupQueueFromQuiz(); });
+    setInterval(flushSignupQueueFromQuiz, 8000);
+  }
+
   /* ===== Persistência local ===== */
   const LS_KEYS = {
     asked: 'hn_asked_ids',
@@ -1039,6 +1085,13 @@
         location.replace('signup.html');
         return;
       }
+
+      /* ===== Corrige cadastros pendentes vindos do signup ===== */
+      scheduleSignupQueueFlusher();
+      try {
+        const fixedId = await flushSignupQueueFromQuiz();
+        if (fixedId) userId = fixedId;
+      } catch(_) {}
 
       /* ===== Namespacing simples + hidratação DESLIGADA ===== */
       localStorage.setItem('hn_user_scoped', userId);
