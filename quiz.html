@@ -257,6 +257,7 @@
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
 
   const BATCH_SIZE = 10;
+  const SESSION_CAP = 50; // ====== 5 lotes (10x5) ======
   const LEADERBOARD_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/rapid-function";
 
   const PARTNERS = [
@@ -305,7 +306,8 @@
     window.addEventListener('online', flushSignupQueueFromQuiz);
     window.addEventListener('focus', flushSignupQueueFromQuiz);
     document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') flushSignupQueueFromQuiz(); });
-    setInterval(flushSignupQueueFromQuiz, 8000);
+    setInterval(flushSignupQueueFlusher, 8000);
+    function flushSignupQueueFlusher(){ flushSignupQueueFromQuiz(); }
   }
 
   /* ===== Persistência local ===== */
@@ -370,6 +372,13 @@
   let currentAttempts   = 0;
   let locked            = false;
   let handlingClick     = false;
+
+  // ===== controle de 5 lotes (50 questões) por sessão
+  let sessAnswered = Number(sessionStorage.getItem('hn_sess_answered') || 0);
+  function bumpSessionAnsweredOnce(){
+    sessAnswered += 1;
+    sessionStorage.setItem('hn_sess_answered', String(sessAnswered));
+  }
 
   const submitQueue = lsGetJSON(LS_KEYS.queue, []);
 
@@ -481,68 +490,28 @@
     }
   }
 
-  /* ===== Voucher via RPC (robusto) ===== */
- async function issueVoucher(user_id) {
-  if (!user_id) throw new Error("missing-user_id");
+  /* ===== Voucher via RPC (simplificada, sem args) ===== */
+  async function issueVoucher(user_id) {
+    if (!user_id) throw new Error("missing-user_id");
 
-  // Idempotência: tenta pegar o mais recente
-  try {
-    const { data: got } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner, user_id')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-    const row0 = Array.isArray(got) ? got[0] : got;
-    if (row0 && row0.code) return row0;
-  } catch (_) {}
-
-  // === Chamada única SEM argumentos ===
-  const { data, error } = await client.rpc('issue_voucher_for_user');
-  if (error) {
-    throw new Error(`voucher-failed: ${error.message || 'RPC error'}`);
-  }
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || !row.code) throw new Error('voucher-sem-code');
-  return row;
-}
-
-
-    // Tenta diferentes nomes/assinaturas
-    const attempts = [
-      { fn: 'issue_voucher_for_user',     args: { p_user_id: user_id } },
-      { fn: 'issue_voucher_for_user',     args: { user_id: user_id } },
-      { fn: 'rpc_issue_voucher_for_user', args: { p_user_id: user_id } },
-      { fn: 'rpc_issue_voucher_for_user', args: { user_id: user_id } },
-    ];
-
-    let lastErr = null;
-    for (const a of attempts) {
-      try {
-        const { data, error } = await client.rpc(a.fn, a.args);
-        if (error) { lastErr = error; continue; }
-        const row = Array.isArray(data) ? data[0] : data;
-        if (row && row.code) return row;
-        lastErr = new Error(`RPC ${a.fn} retornou sem 'code'`);
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-
-    // Verifica se criou mesmo com erro
+    // Idempotência: tenta pegar o mais recente já emitido
     try {
-      const { data: got2 } = await client
+      const { data: got } = await client
         .from('vouchers')
-        .select('id, code, status, issued_at, expires_at, partner')
+        .select('id, code, status, issued_at, expires_at, partner, user_id')
         .eq('user_id', user_id)
         .order('issued_at', { ascending: false })
         .limit(1);
-      const row2 = Array.isArray(got2) ? got2[0] : got2;
-      if (row2 && row2.code) return row2;
+      const row0 = Array.isArray(got) ? got[0] : got;
+      if (row0 && row0.code) return row0;
     } catch (_) {}
 
-    const detail = (lastErr && (lastErr.message || lastErr.error_description || lastErr.hint)) || 'RPC não encontrada/argumento inválido';
-    throw new Error(`voucher-failed: ${detail}`);
+    // Chamada única à função pública sem parâmetros (usa auth.uid() no backend)
+    const { data, error } = await client.rpc('issue_voucher_for_user');
+    if (error) throw new Error(`voucher-failed: ${error.message || 'RPC error'}`);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || !row.code) throw new Error('voucher-sem-code');
+    return row;
   }
 
   function updateProgress(){
@@ -649,6 +618,8 @@
           askedIds.add(q.id);
           localStorage.setItem(LS_KEYS.done, String(totalConcluidas));
           lsSetJSON(LS_KEYS.asked, Array.from(askedIds));
+          // conta para o limite de sessão (50)
+          bumpSessionAnsweredOnce();
         }
 
         if (currentAttempts === 1) {
@@ -681,10 +652,12 @@
   }
   els.options.addEventListener('click', handleOptionActivate, { passive:true });
 
-  /* startBatch com salvaguardas */
+  /* startBatch com salvaguardas + limite de 50 por sessão */
   function startBatch(){
-    // remaining baseado em perguntas ativas – askedIds já saneado no init()
     const remaining = allQuestions.filter(q => q && q.ativa && !askedIds.has(q.id));
+    const capLeft   = Math.max(0, SESSION_CAP - sessAnswered);
+
+    if (capLeft <= 0) { showFinal(); return; }
 
     if (remaining.length === 0) {
       const cold = !sessionStorage.getItem('hn_session_started');
@@ -698,10 +671,9 @@
       return;
     }
 
-    // Embaralha este lote para variar a ordem
     const shuffled = remaining.slice().sort(() => Math.random() - 0.5);
-
-    batch = shuffled.slice(0, BATCH_SIZE);
+    const take = Math.min(BATCH_SIZE, capLeft);
+    batch = shuffled.slice(0, take);
     idxInBatch = 0;
     batchCorrect = 0;
 
@@ -847,7 +819,9 @@
 
         const totalRespondidas = askedIds.size;
         const totalAtivas = allQuestions.length;
-        const remaining = allQuestions.filter(q => !askedIds.has(q.id)).length;
+        const remainingAll = allQuestions.filter(q => !askedIds.has(q.id)).length;
+        const capLeft = Math.max(0, SESSION_CAP - sessAnswered);
+        const isSessionEnd = (capLeft <= 0);
 
         const instruction = 'Apresente o seu código ou um documento no estabelecimento parceiro até 30/11, para retirada do livro.';
 
@@ -896,20 +870,23 @@
 
         els.answeredCount.textContent = `Você já respondeu ${totalRespondidas} de ${totalAtivas} perguntas disponíveis.`;
 
+        // Botões finais: respeita o CAP de 50
         els.continueRow.style.display = 'flex';
-        els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
+        els.btnContinue.style.display = (remainingAll > 0 && !isSessionEnd) ? 'inline-block' : 'none';
 
-        // Ranking / fim total
+        // Ranking / fim total (quando acabar as ativas OU atingir o CAP)
         els.lbConsent.style.display = 'none';
         els.leaderboard.style.display = 'none';
 
-        if (remaining === 0) {
+        if (remainingAll === 0 || isSessionEnd) {
           if (PDF_URL && /^https?:\/\//i.test(PDF_URL)) {
             els.btnDownload.href = PDF_URL;
             els.btnDownload.textContent = '📘 Baixar o livro (PDF)';
             els.downloadRow.style.display = 'flex';
           }
-          els.finalTitle.textContent = 'Você concluiu todas as perguntas! 🎉';
+          els.finalTitle.textContent = isSessionEnd
+            ? 'Você concluiu os 5 lotes! 🎉'
+            : 'Você concluiu todas as perguntas! 🎉';
           els.finalSubtitle.textContent = instruction;
           els.overallText.textContent = `${answeredTotal} / ${totalConcluidas}`;
           els.overallBox.style.display = 'block';
@@ -956,7 +933,7 @@
         const shareMsg = `Acertei ${answeredTotal} de ${totalConcluidas} perguntas no Quiz do Centenário de Criciúma! 🟨🖤 Participe também: ${shareLink}`;
         els.btnShare.href = 'https://wa.me/?text=' + encodeURIComponent(shareMsg);
 
-        dbgLog('showFinal.done', { voucherShown: true, remaining });
+        dbgLog('showFinal.done', { voucherShown: true, remainingAll, isSessionEnd });
       }catch(e){
         dbgLog('showFinal.error', { error: String(e) });
         reportErrorToSupabase(e);
@@ -998,7 +975,6 @@
   // Ao continuar, garantimos que a lista de perguntas está coerente
   els.btnContinue?.addEventListener('click', async ()=>{
     showView('quiz');
-    // Revalida conjunto de perguntas e saneia askedIds contra IDs válidos
     const fresh = await loadAllQuestions();
     if (Array.isArray(fresh) && fresh.length) {
       allQuestions = fresh;
@@ -1048,12 +1024,14 @@
         return;
       }
 
-      /* Escopo por usuário: se mudou, limpa progresso local para não “pular” lotes */
+      /* Escopo por usuário: se mudou, limpa progresso local */
       const scoped = localStorage.getItem('hn_user_scoped');
       if (scoped && scoped !== userId) {
         localStorage.removeItem(LS_KEYS.asked);
         localStorage.removeItem(LS_KEYS.ans1);
         localStorage.removeItem(LS_KEYS.done);
+        sessionStorage.removeItem('hn_sess_answered');
+        sessAnswered = 0;
       }
       localStorage.setItem('hn_user_scoped', userId);
 
@@ -1075,7 +1053,7 @@
       // Carrega perguntas
       allQuestions = await loadAllQuestions();
 
-      // Saneia askedIds contra IDs válidos (evita “remaining 0” indevido)
+      // Saneia askedIds contra IDs válidos
       const validIds = new Set(allQuestions.map(q=>q.id));
       askedIds = new Set([...askedIds].filter(id => validIds.has(id)));
       lsSetJSON(LS_KEYS.asked, Array.from(askedIds));
@@ -1083,11 +1061,9 @@
       localStorage.setItem(LS_KEYS.done, String(totalConcluidas));
 
       if(!allQuestions.length){
-        // Sem perguntas ativas
-        const { question, options, btnTryAgain, btnNext } = els;
-        question.textContent='Nenhuma pergunta ativa encontrada no momento.';
-        options.innerHTML='';
-        btnTryAgain.disabled=true; btnNext.disabled=true;
+        els.question.textContent='Nenhuma pergunta ativa encontrada no momento.';
+        els.options.innerHTML='';
+        els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
         disableExitProtection();
         showView('final');
         els.finalTitle.textContent = 'Ops! Sem perguntas ativas agora';
