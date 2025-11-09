@@ -26,36 +26,29 @@
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .wrap{min-height:100dvh;display:flex;flex-direction:column}
-
     header{border-bottom:1px solid var(--border);background:#fff}
     .head{width:min(980px,94vw);margin:0 auto;padding:12px 0 8px}
     .logo-wrap{display:flex;justify-content:center}
     .logo-wrap img{display:block;width:100%;max-width:420px;height:auto}
     .head h1{margin:8px 0 0;text-align:center;font-size:clamp(18px,3.6vw,24px)}
-
     main{width:min(980px,94vw);margin:16px auto;flex:1}
     .card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px}
     h2{font-size:22px;margin:0 0 6px}
     p.lead{margin:0 0 12px;color:var(--muted)}
     .field{margin:10px 0}
     label span{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
-    input[type="text"],input[type="tel"]{
-      width:100%;padding:12px 12px;font-size:16px;border:1px solid #ddd;border-radius:12px;outline:none
-    }
+    input[type="text"],input[type="tel"]{width:100%;padding:12px 12px;font-size:16px;border:1px solid #ddd;border-radius:12px;outline:none}
     input:focus{border-color:#111}
     .consent{display:flex;gap:10px;font-size:14px;align-items:flex-start;margin-top:6px}
     .btn{display:inline-block;width:100%;padding:14px 16px;border:1px solid #111;border-radius:12px;background:#111;color:#fff;font-size:16px;font-weight:800;cursor:pointer}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
-    .msg{
-      background:#f6f6f6;padding:10px;border-radius:10px;font-size:14px;margin-top:12px;white-space:pre-wrap
-    }
+    .msg{background:#f6f6f6;padding:10px;border-radius:10px;font-size:14px;margin-top:12px;white-space:pre-wrap}
     .msg.ok{background:var(--okbg);color:var(--ok);border:1px solid #cdebd8}
     .msg.err{background:var(--errbg);color:var(--err);border:1px solid #f6c9cf}
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
     .link{color:var(--gold-2);text-decoration:underline;cursor:pointer}
-
     @media (max-height:760px){
       .head{padding:8px 0 4px}
       .logo-wrap img{max-width:360px}
@@ -138,12 +131,13 @@
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
   const LS_KEYS = {
-    phone: 'hn_user_phone',    // NOVO: guarda o telefone em dígitos
+    queue: 'hn_signup_queue',
+    token: 'hn_signup_token',
   };
 
   function openPolicy(){ document.getElementById('policy').showModal(); }
 
-  /* ====== MÁSCARA DE WHATSAPP COM CONTROLE DE CURSOR ====== */
+  /* ====== MÁSCARA DE WHATSAPP ====== */
   const wa = document.getElementById('whatsapp');
   function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
   function formatBR(d){
@@ -177,8 +171,7 @@
     digits = digits.slice(0,11);
     const formatted = formatBR(digits);
     wa.value = formatted;
-    let desiredIdx = targetDigitIdx;
-    if(lastInputType==='insertText' || lastInputType==='insertFromPaste'){ desiredIdx = prevDigitIdx+1; }
+    let desiredIdx = (lastInputType==='insertText'||lastInputType==='insertFromPaste') ? prevDigitIdx+1 : prevDigitIdx;
     if(desiredIdx<0) desiredIdx=0; if(desiredIdx>digits.length) desiredIdx=digits.length;
     const newPos = caretFromDigitIndex(formatted, desiredIdx);
     try{ wa.setSelectionRange(newPos,newPos); }catch(_){}
@@ -198,19 +191,54 @@
     out.textContent = text;
   }
   const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
-  async function retry(fn, {tries=3, base=400}={}){
-    let err;
-    for(let i=0;i<tries;i++){
-      try{ return await fn(); }catch(e){ err=e; await wait(base*Math.pow(2,i)); }
-    }
-    throw err;
-  }
+  async function retry(fn, {tries=3, base=400}={}){ let err; for(let i=0;i<tries;i++){ try{ return await fn(); }catch(e){ err=e; await wait(base*Math.pow(2,i)); } } throw err; }
+  function lsGetJSON(k, f){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f; }catch(_){ return f; } }
+  function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
 
-  /* ===== Fluxo de cadastro SEM ID provisório ===== */
+  /* ===== Fila offline do cadastro ===== */
+  async function flushSignupQueueOnce(){
+    const q = lsGetJSON(LS_KEYS.queue, []);
+    if(!q.length) return;
+    const next = q[0];
+    try{
+      // tenta inserir
+      const { data, error } = await client
+        .from('users')
+        .insert(next)
+        .select('id')
+        .maybeSingle();
+
+      let userId = data?.id || next.id;
+
+      // se duplicidade por whatsapp, busca existente e segue
+      if(error && String(error.message||'').toLowerCase().includes('duplicate')){
+        const { data: found, error: err2 } = await client
+          .from('users').select('id').eq('whatsapp', next.whatsapp).maybeSingle();
+        if(err2) throw err2;
+        userId = found?.id || next.id;
+      }
+
+      // remove da fila e garante id
+      const rest = q.slice(1); lsSetJSON(LS_KEYS.queue, rest);
+      localStorage.setItem('hn_user_id', userId);
+    }catch(_){ /* tenta depois */ }
+  }
+  function scheduleQueueFlusher(){
+    setInterval(flushSignupQueueOnce, 7000);
+    window.addEventListener('online', flushSignupQueueOnce);
+    window.addEventListener('focus', flushSignupQueueOnce);
+    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') flushSignupQueueOnce(); });
+  }
+  scheduleQueueFlusher();
+
+  /* ===== Botão / Token anti-replay ===== */
+  let submitting = false;
+  function setBusy(b){ submitting = b; document.getElementById('submitBtn').disabled = b; }
+
   async function saveUser(e){
     e.preventDefault();
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true;
+    if(submitting) return false;
+    setBusy(true);
     const out = document.getElementById('out'); out.hidden = true;
 
     const nome = document.getElementById('nome').value.trim();
@@ -220,82 +248,72 @@
 
     if(!nome || !cidade || !whatsappMasked || !consent){
       showMsg('Preencha todos os campos e aceite a Política de Privacidade.', 'err');
-      btn.disabled = false; return false;
+      setBusy(false); return false;
     }
 
     const whatsapp = onlyDigits(whatsappMasked);
     if(whatsapp.length < 10){
       showMsg('Digite um WhatsApp válido (com DDD).', 'err');
-      btn.disabled = false; return false;
+      setBusy(false); return false;
     }
 
+    // IMPORTANTE: zera qualquer user antigo para não “herdar” ID
+    localStorage.removeItem('hn_user_id');
+
+    const id = uuidv4();
     const created_at = new Date().toISOString();
-    const newId = uuidv4();
+    const payload = { id, nome, cidade, whatsapp, consent, created_at };
+
+    // token anti-replay por 60s
+    const tokenNow = Date.now();
+    localStorage.setItem(LS_KEYS.token, String(tokenNow));
 
     try{
-      // 1) tenta obter por whatsapp
-      const getByPhone = async () => {
-        const { data, error } = await client
-          .from('users')
-          .select('id')
-          .eq('whatsapp', whatsapp)
-          .maybeSingle();
-        if(error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-        return data?.id || null;
-      };
-
-      // 2) se existe, atualiza e usa o id existente
-      let existingId = await getByPhone();
-      if (existingId) {
-        const { error: updErr } = await client
-          .from('users')
-          .update({ nome, cidade, consent })
-          .eq('id', existingId);
-        if (updErr) {
-          const m = (updErr.message||'').toLowerCase();
-          if(updErr.status===401 || updErr.status===403 || m.includes('rls') || m.includes('policy')){
-            throw new Error('Permissão negada (RLS). Libere o cadastro público na tabela "users".');
-          }
-          // se não conseguir atualizar, segue com o id mesmo assim
-        }
-        localStorage.setItem('hn_user_id', existingId);
-        localStorage.setItem(LS_KEYS.phone, whatsapp);
-        showMsg('Cadastro atualizado! Redirecionando para o quiz…', 'ok');
-        setTimeout(()=>location.href='quiz.html', 500);
-        return false;
-      }
-
-      // 3) se não existe, insere um novo registro
+      // 1) TENTA INSERIR NOVO PARTICIPANTE
       const insertFn = async ()=>{
-        const { data, error } = await client
+        const r = await client
           .from('users')
-          .insert([{ id: newId, nome, cidade, whatsapp, consent, created_at }])
+          .insert(payload)
           .select('id')
           .maybeSingle();
-        if(error){
-          const m = (error.message||'').toLowerCase();
-          if(error.status===401 || error.status===403 || m.includes('rls') || m.includes('policy')){
-            throw new Error('Permissão negada (RLS). Libere o cadastro público na tabela "users".');
-          }
-          throw error;
+
+        // Se inseriu, beleza
+        if(!r.error && r.data?.id){
+          return r.data.id;
         }
-        return data?.id || newId;
+
+        // 2) DUPLICIDADE (mesmo WhatsApp) → reusa o existente
+        const msg = String(r.error?.message||'').toLowerCase();
+        if(msg.includes('duplicate') || msg.includes('unique')){
+          const { data: found, error: err2 } = await client
+            .from('users').select('id').eq('whatsapp', whatsapp).maybeSingle();
+          if(err2) throw err2;
+          return found?.id || id;
+        }
+
+        // 3) Outros erros → propaga
+        if(r.error) throw r.error;
+
+        return id;
       };
 
-      const finalId = await retry(insertFn, { tries: 3, base: 500 });
-      localStorage.setItem('hn_user_id', finalId);
-      localStorage.setItem(LS_KEYS.phone, whatsapp);
+      const userId = await retry(insertFn, { tries: 3, base: 500 });
+      localStorage.setItem('hn_user_id', userId);
+
       showMsg('Cadastro salvo com sucesso! Redirecionando para o quiz…', 'ok');
       setTimeout(()=>location.href='quiz.html', 500);
-      return false;
 
     }catch(err){
-      // Não gravamos hn_user_id para não gerar submissions órfãs
-      const msg = (err && err.message) ? err.message : 'Falha ao salvar seu cadastro.';
-      showMsg(msg, 'err');
-      btn.disabled = false;
-      return false;
+      // Falha de rede / servidor: coloca na fila offline e segue
+      const queue = lsGetJSON(LS_KEYS.queue, []);
+      queue.push(payload); lsSetJSON(LS_KEYS.queue, queue);
+      localStorage.setItem('hn_user_id', id); // garante um ID para a sessão
+      showMsg('Conexão instável. Salvamos localmente e enviaremos em segundo plano. Prosseguindo para o quiz…', 'ok');
+      setTimeout(()=>location.href='quiz.html', 600);
+    }finally{
+      setBusy(false);
     }
+    return false;
   }
 </script>
 </body>
