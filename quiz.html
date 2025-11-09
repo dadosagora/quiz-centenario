@@ -530,7 +530,7 @@ async function issueVoucher(user_id) {
   // 1) ÚNICO RPC suportado: issue_voucher_for_user(p_user_id uuid) -> vouchers
   let lastErr = null;
   try {
-    const { data, error } = await client.rpc('issue_voucher_for_user', { p_user_id: user_id });
+    const { data, error } = await client.rpc('rpc_issue_voucher_for_user', { user_id });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     if (row && row.code) return row;
