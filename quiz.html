@@ -116,23 +116,16 @@
     .dbg{position:fixed;left:8px;right:8px;bottom:8px;background:#111;color:#fff;font:12px/1.3 system-ui,sans-serif;border-radius:10px;padding:8px 10px;opacity:.9;z-index:9999;pointer-events:none;display:none!important}
     .dbg b{color:#ffe082}.dbg .bad{color:#ff8a80}.dbg .ok{color:#a5d6a7}
 
-    /* ===== Botão "Continuar respondendo" em OURO (maior e responsivo) ===== */
-    #continueRow #btnContinue {
-      background: linear-gradient(180deg, var(--gold), var(--gold-2));
-      border-color: var(--gold-2);
-      color: #111;
-      padding: 16px 28px;
-      font-size: 18px;
-      border-radius: 14px;
-      font-weight: 800;
-      letter-spacing: .2px;
-      transition: transform .15s, filter .2s;
+    /* Botão "Continuar respondendo" em OURO */
+    #continueRow #btnContinue{
+      background:linear-gradient(180deg,var(--gold),var(--gold-2));
+      border-color:var(--gold-2); color:#111; padding:16px 28px; font-size:18px;
+      border-radius:14px; font-weight:800; letter-spacing:.2px; transition:transform .15s,filter .2s;
     }
-    #continueRow #btnContinue:hover { filter: brightness(1.05); transform: translateY(-1px); }
-    @media (max-width: 640px){
-      #continueRow{ flex-direction: column; align-items: stretch; }
-      /* FIX: 20% -> 20px */
-      #continueRow #btnContinue{ width: 100%; font-size: 20px; padding: 18px 30px; }
+    #continueRow #btnContinue:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+    @media (max-width:640px){
+      #continueRow{flex-direction:column; align-items:stretch}
+      #continueRow #btnContinue{width:100%; font-size:20px; padding:18px 30px}
     }
   </style>
 </head>
@@ -243,6 +236,7 @@
 
 <div id="__dbg" class="dbg"></div>
 
+<!-- ============== JS ÚNICO (sem scripts aninhados) ============== -->
 <script>
   /* ===== Proteção contra sair/atualizar durante o quiz ===== */
   let __protectExit = false;
@@ -250,27 +244,19 @@
   function disableExitProtection(){ __protectExit = false; }
 
   window.addEventListener('beforeunload', (e) => {
-    if (__protectExit) {
-      e.preventDefault();
-      e.returnValue = '';
-    }
+    if (__protectExit) { e.preventDefault(); e.returnValue = ''; }
   });
 
   function markSafeNavigation(el){
     if (!el) return;
     el.addEventListener('click', () => { disableExitProtection(); }, { capture:true });
   }
-</script>
 
-<script>
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
   const PDF_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/storage/v1/object/public/quiz-premios/livro_centenario_compressed.pdf";
 
-  /* lotes de 10 */
   const BATCH_SIZE = 10;
-
-  /* (mantido por compatibilidade, mas não usado neste build) */
   const LEADERBOARD_URL = "https://fpstwfzqvactvlgwgagu.supabase.co/functions/v1/rapid-function";
 
   const PARTNERS = [
@@ -280,14 +266,12 @@
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  /* ====== DRENAR FILA DE CADASTRO (hn_signup_queue) NO QUIZ ====== */
+  /* ====== DRENAR FILA DE CADASTRO (hn_signup_queue) ====== */
   const SIGNUP_QUEUE_KEY = 'hn_signup_queue';
-  // helpers locais para não conflitar com as versões definidas depois
   function __lsGetJSON(k, fb){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fb; }catch(_){ return fb; } }
   function __lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
 
   async function __upsertUserFromQuiz(payload){
-    // upsert idempotente por whatsapp; depois busca o id oficial
     const { data, error, status } = await client
       .from('users')
       .upsert(payload, { onConflict: 'whatsapp', ignoreDuplicates: true })
@@ -313,9 +297,7 @@
       q.shift(); __lsSetJSON(SIGNUP_QUEUE_KEY, q);
       try{ await client.from('client_logs').insert({ user_id: realId, message:'signup-queue-flushed', stack:null, current_question:null, useragent:navigator.userAgent, current_url:location.href }); }catch(_){}
       return realId;
-    }catch(_){
-      return null;
-    }
+    }catch(_){ return null; }
   }
 
   function scheduleSignupQueueFlusher(){
@@ -328,13 +310,13 @@
 
   /* ===== Persistência local ===== */
   const LS_KEYS = {
-    asked: 'hn_asked_ids',
-    ans1:  'hn_answered_total',
-    done:  'hn_total_concluidas',
-    queue: 'hn_submit_queue',
+    asked:   'hn_asked_ids',
+    ans1:    'hn_answered_total',
+    done:    'hn_total_concluidas',
+    queue:   'hn_submit_queue',
     voucher: 'hn_voucher_code'
   };
-  function lsGetJSON(k, fallback){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(_){ return fallback; } }
+  function lsGetJSON(k, fb){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fb; }catch(_){ return fb; } }
   function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
 
   /* ===== Estado ===== */
@@ -377,7 +359,6 @@
   let userId = null;
   let allQuestions = [];
   let askedIds = new Set(lsGetJSON(LS_KEYS.asked, []));
-
   let answeredTotal = Number(localStorage.getItem(LS_KEYS.ans1) || 0);
   let totalConcluidas = Number(localStorage.getItem(LS_KEYS.done) || 0);
 
@@ -396,7 +377,7 @@
   function normalizeKey(v){const s=(v??'').toString().trim().toLowerCase();const m=s.match(/[abcd]/);return m?m[0]:'';}
   function normalizeText(t){return (t??'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
 
-  /* ===== Debug ===== */
+  /* Debug */
   const DEBUG_PANEL = false;
   const DEBUG_LOGS  = true;
   const dbgEl = document.getElementById('__dbg');
@@ -405,7 +386,7 @@
   async function dbgLog(where, extra={}){ if(!DEBUG_LOGS) return; try{ await client.from('client_logs').insert({ user_id: userId||null, message:`[${where}]`, stack: JSON.stringify(extra), current_question: idxInBatch+1, useragent:navigator.userAgent, current_url:location.href }); }catch(_){} }
   function dbgState(extraMsg=''){ const q=batch[idxInBatch]||{}; const msg=[`<b>estado</b> idx=${idxInBatch}/${Math.max(0,batch.length-1)}`,`qid=${q?.id??'—'}`,`correta=<b>${currentCorrectKey||'?'}</b>`,`tentativas=${currentAttempts}`,`globais (1ª)=${answeredTotal} / total=${totalConcluidas}`,extraMsg&&`<span class="bad">${extraMsg}</span>`].filter(Boolean).join(' • '); dbgShow(msg); }
 
-  /* ===== Util: timeout + retry ===== */
+  /* Timeout + retry */
   async function withTimeout(promise, ms, label='op'){
     let timer;
     const timeout = new Promise((_, rej)=>{ timer = setTimeout(()=>rej(new Error(`Timeout ${label} (${ms}ms)`)), ms); });
@@ -430,7 +411,7 @@
            msg.includes('ux_submissions_user_question');
   }
 
-  /* ===== FILA OFFLINE ===== */
+  /* FILA OFFLINE */
   function queueSubmission(payload){
     submitQueue.push(payload);
     lsSetJSON(LS_KEYS.queue, submitQueue);
@@ -440,7 +421,6 @@
     const copy = submitQueue.slice(0, 10);
     for(const item of copy){
       try{
-        // tenta RPC segura
         let { error } = await withTimeout(
           client.rpc('submit_answer', {
             p_user_id: item.user_id,
@@ -449,7 +429,6 @@
           }),
           6000, 'flushQueue.rpc'
         );
-        // fallback para upsert direto (se a RPC não existir)
         if (error) {
           const r = await withTimeout(
             client.from('submissions')
@@ -459,13 +438,9 @@
           error = r.error || null;
         }
         if (error && !isUniqueViolation(error)) throw error;
-
-        // sucesso → remove do array
         const idx = submitQueue.indexOf(item);
         if(idx > -1) submitQueue.splice(idx,1);
-      }catch(_){
-        // mantém para próxima rodada
-      }
+      }catch(_){}
     }
     lsSetJSON(LS_KEYS.queue, submitQueue);
   }
@@ -476,19 +451,17 @@
     window.addEventListener('online', flushQueueOnce);
   }
 
-  /* ===== INSERT de resposta (RPC + fallback) ===== */
+  /* INSERT de resposta */
   async function insertSubmission({ user_id, question_id, first_try_correct }) {
     const payload = { user_id, question_id, first_try_correct, answered_at: new Date().toISOString() };
     try {
-      // 1) tenta via RPC segura
-      let { data, error } = await client.rpc('submit_answer', {
+      let { error } = await client.rpc('submit_answer', {
         p_user_id: user_id,
         p_question_id: question_id,
         p_first_try_correct: !!first_try_correct
       });
       if (!error) return true;
 
-      // 2) fallback: upsert direto (caso a RPC não exista)
       const r = await client
         .from('submissions')
         .upsert(payload, { onConflict: 'user_id,question_id', ignoreDuplicates: true });
@@ -508,60 +481,58 @@
     }
   }
 
- <script>
-/* ===== Voucher via RPC (robusto) ===== */
-async function issueVoucher(user_id) {
-  if (!user_id) throw new Error("missing-user_id");
+  /* ===== Voucher via RPC (robusto) ===== */
+  async function issueVoucher(user_id) {
+    if (!user_id) throw new Error("missing-user_id");
 
-  // 0) Idempotência: se já existe, retorna o último
-  try {
-    const { data: got } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-    const row0 = Array.isArray(got) ? got[0] : got;
-    if (row0 && row0.code) return row0;
-  } catch (_) {}
-
-  // Helper para tentar diferentes assinaturas/nomes
-  const attempts = [
-    { fn: 'issue_voucher_for_user', args: { p_user_id: user_id } }, // mais provável
-    { fn: 'issue_voucher_for_user', args: { user_id: user_id } },    // caso o arg na função seja user_id
-    { fn: 'rpc_issue_voucher_for_user', args: { p_user_id: user_id } }, // fallback se cadastraram com prefixo
-    { fn: 'rpc_issue_voucher_for_user', args: { user_id: user_id } },
-  ];
-
-  let lastErr = null;
-  for (const a of attempts) {
+    // 0) Idempotência: se já existe, retorna o último
     try {
-      const { data, error } = await client.rpc(a.fn, a.args);
-      if (error) { lastErr = error; continue; }
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row && row.code) return row;
-      lastErr = new Error(`RPC ${a.fn} retornou sem 'code'`);
-    } catch (e) {
-      lastErr = e;
+      const { data: got } = await client
+        .from('vouchers')
+        .select('id, code, status, issued_at, expires_at, partner')
+        .eq('user_id', user_id)
+        .order('issued_at', { ascending: false })
+        .limit(1);
+      const row0 = Array.isArray(got) ? got[0] : got;
+      if (row0 && row0.code) return row0;
+    } catch (_) {}
+
+    // Tenta diferentes nomes/assinaturas
+    const attempts = [
+      { fn: 'issue_voucher_for_user',     args: { p_user_id: user_id } },
+      { fn: 'issue_voucher_for_user',     args: { user_id: user_id } },
+      { fn: 'rpc_issue_voucher_for_user', args: { p_user_id: user_id } },
+      { fn: 'rpc_issue_voucher_for_user', args: { user_id: user_id } },
+    ];
+
+    let lastErr = null;
+    for (const a of attempts) {
+      try {
+        const { data, error } = await client.rpc(a.fn, a.args);
+        if (error) { lastErr = error; continue; }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && row.code) return row;
+        lastErr = new Error(`RPC ${a.fn} retornou sem 'code'`);
+      } catch (e) {
+        lastErr = e;
+      }
     }
+
+    // Verifica se criou mesmo com erro
+    try {
+      const { data: got2 } = await client
+        .from('vouchers')
+        .select('id, code, status, issued_at, expires_at, partner')
+        .eq('user_id', user_id)
+        .order('issued_at', { ascending: false })
+        .limit(1);
+      const row2 = Array.isArray(got2) ? got2[0] : got2;
+      if (row2 && row2.code) return row2;
+    } catch (_) {}
+
+    const detail = (lastErr && (lastErr.message || lastErr.error_description || lastErr.hint)) || 'RPC não encontrada/argumento inválido';
+    throw new Error(`voucher-failed: ${detail}`);
   }
-
-  // 2) Verifica se criou mesmo com erro de rede
-  try {
-    const { data: got2 } = await client
-      .from('vouchers')
-      .select('id, code, status, issued_at, expires_at, partner')
-      .eq('user_id', user_id)
-      .order('issued_at', { ascending: false })
-      .limit(1);
-    const row2 = Array.isArray(got2) ? got2[0] : got2;
-    if (row2 && row2.code) return row2;
-  } catch (_) {}
-
-  const detail = (lastErr && (lastErr.message || lastErr.error_description || lastErr.hint)) || 'RPC não encontrada/argumento inválido';
-  throw new Error(`voucher-failed: ${detail}`);
-}
-</script>
 
   function updateProgress(){
     const total = Math.max(batch.length,1);
@@ -699,11 +670,11 @@ async function issueVoucher(user_id) {
   }
   els.options.addEventListener('click', handleOptionActivate, { passive:true });
 
-  /* ===== startBatch com salvaguarda anti-"final a frio" ===== */
+  /* startBatch com salvaguardas */
   function startBatch(){
+    // remaining baseado em perguntas ativas – askedIds já saneado no init()
     const remaining = allQuestions.filter(q => q && q.ativa && !askedIds.has(q.id));
 
-    // Salvaguarda: na 1ª carga da sessão, se não vier pergunta, recomeça ignorando askedIds
     if (remaining.length === 0) {
       const cold = !sessionStorage.getItem('hn_session_started');
       if (cold && allQuestions.length) {
@@ -716,7 +687,10 @@ async function issueVoucher(user_id) {
       return;
     }
 
-    batch = remaining.slice(0, BATCH_SIZE);
+    // Embaralha este lote para variar a ordem
+    const shuffled = remaining.slice().sort(() => Math.random() - 0.5);
+
+    batch = shuffled.slice(0, BATCH_SIZE);
     idxInBatch = 0;
     batchCorrect = 0;
 
@@ -819,52 +793,18 @@ async function issueVoucher(user_id) {
     try{
       if(!userId) return items;
       if(items.some(r => r.id === userId)) return items;
-      const { data, error } = await client
+      const { data } = await client
         .from('public_leaderboard_v')
         .select('id,nome,first_try_hits,total_answered')
         .eq('id', userId)
         .maybeSingle();
-      if(!error && data){
+      if(data){
         return [...items, data]
           .sort((a,b)=>(b.first_try_hits||0)-(a.first_try_hits||0))
           .slice(0, 50);
       }
       return items;
     }catch(_){ return items; }
-  }
-
-  /* ===== (mantida para compatibilidade, mas DESLIGADA via flag no init) ===== */
-  async function hydrateProgressFromServer(user_id){
-    const { data: subs, error } = await client
-      .from('submissions')
-      .select('question_id, first_try_correct')
-      .eq('user_id', user_id)
-      .order('answered_at', { ascending: true });
-
-    if (error) {
-      try { await client.from('client_logs').insert({
-        user_id,
-        message: 'hydrateProgressFromServer failed: ' + (error.message || String(error)),
-        stack: null,
-        current_question: null,
-        useragent: navigator.userAgent,
-        current_url: location.href
-      }); } catch(_) {}
-      return;
-    }
-
-    const answeredIds = Array.from(new Set((subs || []).map(s => s.question_id)));
-    const firstTryHits = (subs || []).reduce((acc, s) => acc + (s.first_try_correct ? 1 : 0), 0);
-
-    askedIds = new Set(answeredIds);
-    totalConcluidas = answeredIds.length;
-    answeredTotal = firstTryHits;
-
-    lsSetJSON(LS_KEYS.asked, answeredIds);
-    localStorage.setItem(LS_KEYS.done, String(totalConcluidas));
-    localStorage.setItem(LS_KEYS.ans1, String(answeredTotal));
-
-    localStorage.setItem('hn_user_scoped', user_id);
   }
 
   function renderLeaderboard(rows){
@@ -948,7 +888,7 @@ async function issueVoucher(user_id) {
         els.continueRow.style.display = 'flex';
         els.btnContinue.style.display = (remaining > 0) ? 'inline-block' : 'none';
 
-        // Ranking / fim de tudo
+        // Ranking / fim total
         els.lbConsent.style.display = 'none';
         els.leaderboard.style.display = 'none';
 
@@ -1044,8 +984,17 @@ async function issueVoucher(user_id) {
     els.btnCopy.textContent='Copiar código';
   });
 
-  els.btnContinue?.addEventListener('click', ()=>{
+  // Ao continuar, garantimos que a lista de perguntas está coerente
+  els.btnContinue?.addEventListener('click', async ()=>{
     showView('quiz');
+    // Revalida conjunto de perguntas e saneia askedIds contra IDs válidos
+    const fresh = await loadAllQuestions();
+    if (Array.isArray(fresh) && fresh.length) {
+      allQuestions = fresh;
+      const validIds = new Set(allQuestions.map(q=>q.id));
+      askedIds = new Set([...askedIds].filter(id => validIds.has(id)));
+      lsSetJSON(LS_KEYS.asked, Array.from(askedIds));
+    }
     startBatch();
   });
 
@@ -1071,7 +1020,7 @@ async function issueVoucher(user_id) {
 
   (async function init(){
     try{
-      // 🔒 Redireciona se for reload (evita duplicar lote / voltar no meio)
+      // Guarda navegação: se reload, redireciona
       const nav = (performance && performance.getEntriesByType) ? performance.getEntriesByType('navigation')[0] : null;
       const isReload = nav ? (nav.type === 'reload') : (performance && performance.navigation && performance.navigation.type === 1);
       if (isReload) {
@@ -1088,20 +1037,21 @@ async function issueVoucher(user_id) {
         return;
       }
 
-      /* ===== Corrige cadastros pendentes vindos do signup ===== */
+      /* Escopo por usuário: se mudou, limpa progresso local para não “pular” lotes */
+      const scoped = localStorage.getItem('hn_user_scoped');
+      if (scoped && scoped !== userId) {
+        localStorage.removeItem(LS_KEYS.asked);
+        localStorage.removeItem(LS_KEYS.ans1);
+        localStorage.removeItem(LS_KEYS.done);
+      }
+      localStorage.setItem('hn_user_scoped', userId);
+
+      /* Corrige cadastros pendentes vindos do signup */
       scheduleSignupQueueFlusher();
       try {
         const fixedId = await flushSignupQueueFromQuiz();
         if (fixedId) userId = fixedId;
       } catch(_) {}
-
-      /* ===== Namespacing simples + hidratação DESLIGADA ===== */
-      localStorage.setItem('hn_user_scoped', userId);
-
-      const HYDRATE_PROGRESS = false; // manter false para evitar "pular ao final"
-      if (HYDRATE_PROGRESS) {
-        await hydrateProgressFromServer(userId);
-      }
 
       // Saídas intencionais
       markSafeNavigation(document.getElementById('btnEnd'));
@@ -1111,11 +1061,22 @@ async function issueVoucher(user_id) {
 
       scheduleQueueFlusher();
 
+      // Carrega perguntas
       allQuestions = await loadAllQuestions();
+
+      // Saneia askedIds contra IDs válidos (evita “remaining 0” indevido)
+      const validIds = new Set(allQuestions.map(q=>q.id));
+      askedIds = new Set([...askedIds].filter(id => validIds.has(id)));
+      lsSetJSON(LS_KEYS.asked, Array.from(askedIds));
+      totalConcluidas = askedIds.size;
+      localStorage.setItem(LS_KEYS.done, String(totalConcluidas));
+
       if(!allQuestions.length){
-        els.question.textContent='Nenhuma pergunta ativa encontrada no momento.';
-        els.options.innerHTML='';
-        els.btnTryAgain.disabled=true; els.btnNext.disabled=true;
+        // Sem perguntas ativas
+        const { question, options, btnTryAgain, btnNext } = els;
+        question.textContent='Nenhuma pergunta ativa encontrada no momento.';
+        options.innerHTML='';
+        btnTryAgain.disabled=true; btnNext.disabled=true;
         disableExitProtection();
         showView('final');
         els.finalTitle.textContent = 'Ops! Sem perguntas ativas agora';
