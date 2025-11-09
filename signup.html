@@ -135,12 +135,10 @@
   /* ===== Config ===== */
   const SUPABASE_URL  = "https://fpstwfzqvactvlgwgagu.supabase.co";
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwc3R3ZnpxdmFjdHZsZ3dnYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NjE2NTgsImV4cCI6MjA3NjIzNzY1OH0._hoxv_VMLcK6ZAVjmR2mV1t8Ma5vr9h-Ti_sIL42CPI";
-
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
   const LS_KEYS = {
-    queue: 'hn_signup_queue',
-    token: 'hn_signup_token',
+    phone: 'hn_user_phone',    // NOVO: guarda o telefone em dígitos
   };
 
   function openPolicy(){ document.getElementById('policy').showModal(); }
@@ -207,58 +205,12 @@
     }
     throw err;
   }
-  function lsGetJSON(k, fallback){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(_){ return fallback; } }
-  function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
 
-  /* ===== Fila offline do cadastro =====
-     Guarda o payload completo {id,nome,cidade,whatsapp,consent,created_at}
-     e reenfileira até confirmar no servidor (idempotente por whatsapp). */
-  async function flushSignupQueueOnce(){
-    const q = lsGetJSON(LS_KEYS.queue, []);
-    if(!q.length) return;
-    const next = q[0];
-    try{
-      // upsert idempotente por whatsapp, sem sobrescrever campos existentes
-      const { data, error } = await client
-        .from('users')
-        .upsert(next, { onConflict: 'whatsapp', ignoreDuplicates: true })
-        .select('id')
-        .maybeSingle();
-      if(error && !String(error.message||'').toLowerCase().includes('duplicate')){
-        throw error;
-      }
-      // se não voltou id, busca pelo whatsapp
-      let userId = data?.id;
-      if(!userId){
-        const { data: found, error: err2 } = await client
-          .from('users').select('id').eq('whatsapp', next.whatsapp).maybeSingle();
-        if(err2) throw err2;
-        userId = found?.id || next.id; // fallback ao id local
-      }
-      // remove da fila
-      q.shift(); lsSetJSON(LS_KEYS.queue, q);
-      // garante hn_user_id
-      localStorage.setItem('hn_user_id', userId);
-    }catch(_){
-      // mantém na fila para próxima tentativa
-    }
-  }
-  function scheduleQueueFlusher(){
-    setInterval(flushSignupQueueOnce, 7000);
-    window.addEventListener('online', flushSignupQueueOnce);
-    window.addEventListener('focus', flushSignupQueueOnce);
-    document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') flushSignupQueueOnce(); });
-  }
-  scheduleQueueFlusher();
-
-  /* ===== Botão / Token anti-replay ===== */
-  let submitting = false;
-  function setBusy(b){ submitting = b; document.getElementById('submitBtn').disabled = b; }
-
+  /* ===== Fluxo de cadastro SEM ID provisório ===== */
   async function saveUser(e){
     e.preventDefault();
-    if(submitting) return false;
-    setBusy(true);
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
     const out = document.getElementById('out'); out.hidden = true;
 
     const nome = document.getElementById('nome').value.trim();
@@ -268,74 +220,82 @@
 
     if(!nome || !cidade || !whatsappMasked || !consent){
       showMsg('Preencha todos os campos e aceite a Política de Privacidade.', 'err');
-      setBusy(false); return false;
+      btn.disabled = false; return false;
     }
 
     const whatsapp = onlyDigits(whatsappMasked);
     if(whatsapp.length < 10){
       showMsg('Digite um WhatsApp válido (com DDD).', 'err');
-      setBusy(false); return false;
+      btn.disabled = false; return false;
     }
 
-    const id = uuidv4();
     const created_at = new Date().toISOString();
-    const payload = { id, nome, cidade, whatsapp, consent, created_at };
-
-    // token anti-replay por 60s
-    const tokenNow = Date.now();
-    localStorage.setItem(LS_KEYS.token, String(tokenNow));
+    const newId = uuidv4();
 
     try{
-      // 1) upsert idempotente por whatsapp (não sobrescreve se já existir)
-      const upsertFn = async ()=>{
-        const { data, error, status } = await client
+      // 1) tenta obter por whatsapp
+      const getByPhone = async () => {
+        const { data, error } = await client
           .from('users')
-          .upsert(payload, { onConflict: 'whatsapp', ignoreDuplicates: true })
           .select('id')
+          .eq('whatsapp', whatsapp)
           .maybeSingle();
-
-        if(error){
-          // Erros de política (401/403/42501)
-          const m = (error.message||'').toLowerCase();
-          if(status===401 || status===403 || m.includes('rls') || m.includes('policy')){
-            throw new Error('Permissão negada (RLS). Avise o suporte para liberar o cadastro público da tabela "users".');
-          }
-          // Se não for duplicidade, propaga
-          if(!m.includes('duplicate') && status!==409) throw error;
-        }
-
-        // Se duplicou, consulta o id existente
-        let userId = data?.id;
-        if(!userId){
-          const { data: found, error: err2 } = await client
-            .from('users').select('id').eq('whatsapp', whatsapp).maybeSingle();
-          if(err2) throw err2;
-          userId = found?.id || id;
-        }
-        return userId;
+        if(error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
+        return data?.id || null;
       };
 
-      const userId = await retry(upsertFn, { tries: 3, base: 500 });
-      localStorage.setItem('hn_user_id', userId);
+      // 2) se existe, atualiza e usa o id existente
+      let existingId = await getByPhone();
+      if (existingId) {
+        const { error: updErr } = await client
+          .from('users')
+          .update({ nome, cidade, consent })
+          .eq('id', existingId);
+        if (updErr) {
+          const m = (updErr.message||'').toLowerCase();
+          if(updErr.status===401 || updErr.status===403 || m.includes('rls') || m.includes('policy')){
+            throw new Error('Permissão negada (RLS). Libere o cadastro público na tabela "users".');
+          }
+          // se não conseguir atualizar, segue com o id mesmo assim
+        }
+        localStorage.setItem('hn_user_id', existingId);
+        localStorage.setItem(LS_KEYS.phone, whatsapp);
+        showMsg('Cadastro atualizado! Redirecionando para o quiz…', 'ok');
+        setTimeout(()=>location.href='quiz.html', 500);
+        return false;
+      }
 
+      // 3) se não existe, insere um novo registro
+      const insertFn = async ()=>{
+        const { data, error } = await client
+          .from('users')
+          .insert([{ id: newId, nome, cidade, whatsapp, consent, created_at }])
+          .select('id')
+          .maybeSingle();
+        if(error){
+          const m = (error.message||'').toLowerCase();
+          if(error.status===401 || error.status===403 || m.includes('rls') || m.includes('policy')){
+            throw new Error('Permissão negada (RLS). Libere o cadastro público na tabela "users".');
+          }
+          throw error;
+        }
+        return data?.id || newId;
+      };
+
+      const finalId = await retry(insertFn, { tries: 3, base: 500 });
+      localStorage.setItem('hn_user_id', finalId);
+      localStorage.setItem(LS_KEYS.phone, whatsapp);
       showMsg('Cadastro salvo com sucesso! Redirecionando para o quiz…', 'ok');
       setTimeout(()=>location.href='quiz.html', 500);
+      return false;
 
     }catch(err){
-      // Falha de rede / servidor: coloca na fila offline e segue
-      if(navigator.onLine === false || /network|fetch|timeout/i.test(String(err?.message||''))){
-        const queue = lsGetJSON(LS_KEYS.queue, []);
-        queue.push(payload); lsSetJSON(LS_KEYS.queue, queue);
-        localStorage.setItem('hn_user_id', id); // mantém consistência pro quiz
-        showMsg('Você está offline ou instável. Salvamos localmente e tentaremos enviar ao servidor em segundo plano. Prosseguindo para o quiz…', 'ok');
-        setTimeout(()=>location.href='quiz.html', 600);
-      }else{
-        showMsg((err && err.message) ? err.message : 'Falha ao salvar seu cadastro.', 'err');
-      }
-    }finally{
-      setBusy(false);
+      // Não gravamos hn_user_id para não gerar submissions órfãs
+      const msg = (err && err.message) ? err.message : 'Falha ao salvar seu cadastro.';
+      showMsg(msg, 'err');
+      btn.disabled = false;
+      return false;
     }
-    return false;
   }
 </script>
 </body>
