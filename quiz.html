@@ -289,10 +289,7 @@
 
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  /* ===== NOVO: base das functions ===== */
-  const FN_BASE = `${SUPABASE_URL}/functions/v1`;
-  const ANON    = SUPABASE_ANON;
-
+ 
   /* ===== Persistência local ===== */
   const LS_KEYS = {
     asked: 'hn_asked_ids',
@@ -454,24 +451,26 @@
     }
   }
 
-  /* ===== NOVO: emitir/obter voucher via Edge Function (idempotente) ===== */
-  async function issueVoucher(user_id){
-    const res = await fetch(`${FN_BASE}/admin-vouchers`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + ANON,
-        "apikey": ANON
-      },
-      body: JSON.stringify({ action: "issue", user_id })
-    });
-    let json = {};
-    try { json = await res.json(); } catch(_) {}
-    if (!res.ok || !json.ok || !json.voucher) {
-      throw new Error(json?.error || "Falha ao emitir voucher");
-    }
-    return json.voucher; // { code, issued_at, expires_at, partner }
+ /* ===== NOVO: emitir/obter voucher via RPC (idempotente) ===== */
+async function issueVoucher(user_id){
+  if (!user_id) throw new Error("missing-user_id");
+
+  // 1) tenta a função nova: issue_voucher_for_user(p_user_id uuid)
+  try{
+    const { data, error } = await client.rpc('issue_voucher_for_user', { p_user_id: user_id });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row && row.code) return row;               // { id, code, status, issued_at, expires_at, partner, ... }
+    throw new Error('no-code-returned');
+  }catch(e1){
+    // 2) fallback p/ função antiga: issue_voucher_once(p_user uuid, p_partner text)
+    const { data: oldData, error: e2 } = await client.rpc('issue_voucher_once', { p_user: user_id, p_partner: null });
+    if (e2) throw new Error(`rpc-new-failed: ${(e1 && e1.message) || e1}; rpc-old-failed: ${e2.message}`);
+    const row = Array.isArray(oldData) ? oldData[0] : oldData;
+    if (row && row.code) return row;
+    throw new Error('no-code-returned');
   }
+}
 
   function updateProgress(){
     const total = Math.max(batch.length,1);
