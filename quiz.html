@@ -508,24 +508,40 @@
     }
   }
 
-/* ===== Voucher via RPC (sem ambiguidade) ===== */
+<script>
+/* ===== Voucher via RPC correta ===== */
 async function issueVoucher(user_id) {
   if (!user_id) throw new Error("missing-user_id");
 
-  // 0) Idempotência local: tenta recuperar voucher já criado
+  // idempotência: se já existe, retorna o último
   try {
-    const { data: got, error: gotErr } = await client
+    const { data: got } = await client
       .from('vouchers')
       .select('id, code, status, issued_at, expires_at, partner')
       .eq('user_id', user_id)
       .order('issued_at', { ascending: false })
       .limit(1);
-
-    if (!gotErr) {
-      const row = Array.isArray(got) ? got[0] : got;
-      if (row && row.code) return row;
-    }
+    const row = Array.isArray(got) ? got[0] : got;
+    if (row && row.code) return row;
   } catch (_) {}
+
+  // chama a nova RPC criada no banco
+  const { data, error } = await client.rpc('rpc_issue_voucher_for_user', {
+    p_user_id: user_id
+  });
+
+  if (error) {
+    throw new Error(`voucher-rpc-erro: ${error.message || JSON.stringify(error)}`);
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || !row.code) {
+    throw new Error('voucher-rpc-sem-codigo');
+  }
+  return row;
+}
+</script>
+
 
   // 1) ÚNICO RPC suportado: issue_voucher_for_user(p_user_id uuid) -> vouchers
   let lastErr = null;
