@@ -482,20 +482,31 @@
   }
 
   /* ===== Voucher via RPC (robusto) ===== */
-  async function issueVoucher(user_id) {
-    if (!user_id) throw new Error("missing-user_id");
+ async function issueVoucher(user_id) {
+  if (!user_id) throw new Error("missing-user_id");
 
-    // 0) Idempotência: se já existe, retorna o último
-    try {
-      const { data: got } = await client
-        .from('vouchers')
-        .select('id, code, status, issued_at, expires_at, partner')
-        .eq('user_id', user_id)
-        .order('issued_at', { ascending: false })
-        .limit(1);
-      const row0 = Array.isArray(got) ? got[0] : got;
-      if (row0 && row0.code) return row0;
-    } catch (_) {}
+  // Idempotência: tenta pegar o mais recente
+  try {
+    const { data: got } = await client
+      .from('vouchers')
+      .select('id, code, status, issued_at, expires_at, partner, user_id')
+      .eq('user_id', user_id)
+      .order('issued_at', { ascending: false })
+      .limit(1);
+    const row0 = Array.isArray(got) ? got[0] : got;
+    if (row0 && row0.code) return row0;
+  } catch (_) {}
+
+  // === Chamada única SEM argumentos ===
+  const { data, error } = await client.rpc('issue_voucher_for_user');
+  if (error) {
+    throw new Error(`voucher-failed: ${error.message || 'RPC error'}`);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || !row.code) throw new Error('voucher-sem-code');
+  return row;
+}
+
 
     // Tenta diferentes nomes/assinaturas
     const attempts = [
