@@ -508,58 +508,57 @@
     }
   }
 
-  /* ===== Voucher via RPC com fallbacks e diagnóstico ===== */
-  async function issueVoucher(user_id) {
-    if (!user_id) throw new Error("missing-user_id");
+ /* ===== Voucher via RPC com fallback e diagnóstico otimizado ===== */
+async function issueVoucher(user_id) {
+  if (!user_id) throw new Error("missing-user_id");
 
-    // 0) Idempotência
-    try {
-      const { data: got, error: gotErr } = await client
-        .from('vouchers')
-        .select('id, code, status, issued_at, expires_at, partner')
-        .eq('user_id', user_id)
-        .order('issued_at', { ascending: false })
-        .limit(1);
-      if (!gotErr) {
-        const row = Array.isArray(got) ? got[0] : got;
-        if (row && row.code) return row;
-      }
-    } catch (_) {}
-
-    // 1) RPCs possíveis
-    const paramVariants = [
-      { fn: 'issue_voucher_for_user', args: { p_user_id: user_id } },
-      { fn: 'issue_voucher_for_user', args: { user_id: user_id } },
-      { fn: 'issue_voucher_for_user', args: { p_user: user_id } },
-      { fn: 'issue_voucher_once',     args: { p_user: user_id, p_partner: null } }
-    ];
-    let lastErr = null;
-    for (const v of paramVariants) {
-      try {
-        const { data, error } = await client.rpc(v.fn, v.args);
-        if (error) { lastErr = error; continue; }
-        const row = Array.isArray(data) ? data[0] : data;
-        if (row && row.code) return row;
-      } catch (e) { lastErr = e; }
+  // 0) Idempotência: tenta recuperar voucher existente
+  try {
+    const { data: got, error: gotErr } = await client
+      .from('vouchers')
+      .select('id, code, status, issued_at, expires_at, partner')
+      .eq('user_id', user_id)
+      .order('issued_at', { ascending: false })
+      .limit(1);
+    if (!gotErr) {
+      const row = Array.isArray(got) ? got[0] : got;
+      if (row && row.code) return row;
     }
+  } catch (_) {}
 
-    // 2) corrida de concorrência
+  // 1) Tentativas de chamada RPC (sequencial)
+  const paramVariants = [
+    { fn: 'issue_voucher_for_user', args: { p_user_id: user_id } },   // ✅ principal
+    { fn: 'issue_voucher_once',     args: { p_user: user_id } }       // ✅ alternativa
+  ];
+
+  let lastErr = null;
+  for (const v of paramVariants) {
     try {
-      const { data: got2, error: gotErr2 } = await client
-        .from('vouchers')
-        .select('id, code, status, issued_at, expires_at, partner')
-        .eq('user_id', user_id)
-        .order('issued_at', { ascending: false })
-        .limit(1);
-      if (!gotErr2) {
-        const row = Array.isArray(got2) ? got2[0] : got2;
-        if (row && row.code) return row;
-      }
-    } catch (_) {}
-
-    const msg = lastErr?.message || String(lastErr) || 'voucher RPC indisponível';
-    throw new Error(`voucher-failed: ${msg}`);
+      const { data, error } = await client.rpc(v.fn, v.args);
+      if (error) { lastErr = error; continue; }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row && row.code) return row;
+    } catch (e) { lastErr = e; }
   }
+
+  // 2) Corrida de concorrência (checa de novo após RPC falhar)
+  try {
+    const { data: got2, error: gotErr2 } = await client
+      .from('vouchers')
+      .select('id, code, status, issued_at, expires_at, partner')
+      .eq('user_id', user_id)
+      .order('issued_at', { ascending: false })
+      .limit(1);
+    if (!gotErr2) {
+      const row = Array.isArray(got2) ? got2[0] : got2;
+      if (row && row.code) return row;
+    }
+  } catch (_) {}
+
+  const msg = lastErr?.message || String(lastErr) || 'voucher RPC indisponível';
+  throw new Error(`voucher-failed: ${msg}`);
+}
 
   function updateProgress(){
     const total = Math.max(batch.length,1);
