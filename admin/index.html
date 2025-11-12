@@ -49,7 +49,7 @@
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .row-1{display:grid;grid-template-columns:1fr;gap:10px}
     label span{display:block;font-size:12px;font-weight:800;margin:8px 0 4px}
-    input[type="text"], textarea, select{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
+    input[type="text"], textarea, select, input[type="number"]{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
     textarea{min-height:72px;resize:vertical}
     .modal-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #eee}
 
@@ -89,6 +89,8 @@
         <button class="btn" onclick="switchTab('questions')">➕ Nova pergunta</button>
         <button class="btn secondary" onclick="switchTab('participants')">🔎 Buscar participantes</button>
         <button class="btn secondary" onclick="switchTab('vouchers')">🏷️ Validar retirada</button>
+        <!-- NOVO: Criar retirada manual -->
+        <button class="btn secondary" onclick="openDelivery()">📦 Criar retirada</button>
       </div>
       <div class="muted">Métricas gerais (todo o período)</div>
 
@@ -102,12 +104,10 @@
 
     <div class="dash-split">
       <div class="card">
-        <!-- [PATCH] Título ajustado para refletir o que é mostrado -->
         <h2>Parceiros — revistas retiradas</h2>
         <div style="overflow:auto">
           <table>
             <thead>
-              <!-- [PATCH] só “Retiradas” por parceiro -->
               <tr><th>Parceiro</th><th>Retiradas</th></tr>
             </thead>
             <tbody id="t-partners"><tr><td colspan="2" class="muted">Carregando…</td></tr></tbody>
@@ -265,25 +265,55 @@
         <select id="redeem-partner">
           <option value="Mina">Mina</option>
           <option value="Café Imigrante">Café Imigrante</option>
-          <!-- [PATCH] Novo parceiro -->
           <option value="HN Notícias">HN Notícias</option>
         </select>
       </label>
       <div class="muted" style="margin-top:6px">Isso ficará registrado no voucher.</div>
 
-      <!-- [PATCH] Campo de observação para HN -->
       <div id="hn-note-wrap" style="display:none">
         <label>
           <span>Observação (HN)</span>
           <textarea id="hn-note" placeholder="Ex.: 5 revistas para Sicredi, 3 para FIESC…"></textarea>
         </label>
-        <div class="muted">Use este campo para registrar quantidades por patrocinador quando a retirada for pelo HN.</div>
+        <div class="muted">Use este campo quando a retirada for pelo HN.</div>
       </div>
     </div>
   </div>
   <div class="modal-f">
     <button class="btn secondary" onclick="closeRedeem()">Cancelar</button>
     <button class="btn" onclick="submitRedeem()">Confirmar</button>
+  </div>
+</dialog>
+
+<!-- NOVO: MODAL – Criar retirada manual (sem voucher) -->
+<dialog id="dlg-delivery">
+  <div class="modal-h">Criar retirada (manual)</div>
+  <div class="modal-b">
+    <div class="row">
+      <label>
+        <span>Parceiro</span>
+        <select id="delivery-partner">
+          <option value="Mina">Mina</option>
+          <option value="Café Imigrante">Café Imigrante</option>
+          <option value="HN Notícias">HN Notícias</option>
+        </select>
+      </label>
+      <label>
+        <span>Quantidade</span>
+        <input id="delivery-qty" type="number" min="1" step="1" value="1"/>
+      </label>
+    </div>
+    <div class="row-1" id="delivery-note-wrap" style="display:none">
+      <label>
+        <span>Observação (HN)</span>
+        <textarea id="delivery-note" placeholder="Ex.: 5 p/ Sicredi, 3 p/ FIESC…"></textarea>
+      </label>
+      <div class="muted">Detalhe quando a retirada for pelo HN.</div>
+    </div>
+  </div>
+  <div class="modal-f">
+    <button class="btn secondary" onclick="closeDelivery()">Cancelar</button>
+    <button class="btn" onclick="submitDelivery()">Salvar</button>
   </div>
 </dialog>
 
@@ -382,8 +412,11 @@
     bulkStatsParticipants: (user_ids=[]) => callApi("admin-participants", { action:"stats_bulk", user_ids }),
     
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
-    // [PATCH] envia 'note' opcional ao backend
     redeemVoucher: (id, partner, note) => callApi("admin-vouchers",{ action:"redeem", id, partner, note }),
+
+    // NOVO: retiradas manuais
+    listDeliveries : () => callApi("admin-deliveries", { action:"list" }),
+    createDelivery : ({partner,qty,note}) => callApi("admin-deliveries", { action:"create", partner, qty, note }),
 
     participantsStats: (ids=[]) => callApi("admin-participants", { action:"stats_bulk", ids }),
     questionsStats: (ids=[]) => callApi("admin-questions", { action:"stats_bulk", ids }),
@@ -394,35 +427,47 @@
   // ====== DASHBOARD ======
   async function loadDash(){
     try{
-      const [qRes, pRes, vRes] = await Promise.allSettled([
+      const [qRes, pRes, vRes, dRes] = await Promise.allSettled([
         AdminAPI.listQuestions({}),
         AdminAPI.listParticipants(""),
-        AdminAPI.listVouchers({})
+        AdminAPI.listVouchers({}),
+        AdminAPI.listDeliveries() // NOVO
       ]);
 
       const qs = (qRes.status==='fulfilled' && Array.isArray(qRes.value?.items)) ? qRes.value.items : [];
       const ps = (pRes.status==='fulfilled' && Array.isArray(pRes.value?.items)) ? pRes.value.items : [];
       const vs = (vRes.status==='fulfilled' && Array.isArray(vRes.value?.items)) ? vRes.value.items : [];
+      const ds = (dRes.status==='fulfilled' && Array.isArray(dRes.value?.items)) ? dRes.value.items : [];
 
       const actives = qs.filter(q=>q.ativa).length;
       $('kpi-questions').textContent = `${actives} / ${qs.length}`;
       $('kpi-users').textContent     = String(ps.length);
       $('kpi-v7').textContent        = String(vs.length);
       const redeemedTotal            = vs.filter(v=>v.status==='retirado').length;
-      $('kpi-r7').textContent        = String(redeemedTotal);
+      const manualTotal              = ds.reduce((s,d)=>s+Math.max(0,parseInt(d.qty||0,10)),0);
+      $('kpi-r7').textContent        = String(redeemedTotal + manualTotal);
 
-      // [PATCH] Agregar SOMENTE retiradas por parceiro
+      // Parceiros – somando vouchers retirados + retiradas manuais
       const byPartner = {};
+
+      // 1) vouchers retirados
       for (const v of vs){
         if (v.status !== 'retirado') continue;
         const p = (v.partner && v.partner.trim()) ? v.partner : '(Sem parceiro)';
-        if(!byPartner[p]) byPartner[p] = { redeemed:0 };
-        byPartner[p].redeemed++;
+        if(!byPartner[p]) byPartner[p] = 0;
+        byPartner[p] += 1;
       }
-      const rows = Object.entries(byPartner).sort((a,b)=>b[1].redeemed - a[1].redeemed);
+      // 2) entregas manuais
+      for (const d of ds){
+        const p = (d.partner && d.partner.trim()) ? d.partner : '(Sem parceiro)';
+        const q = Math.max(0, parseInt(d.qty||0,10));
+        if(!byPartner[p]) byPartner[p] = 0;
+        byPartner[p] += q;
+      }
 
+      const rows = Object.entries(byPartner).sort((a,b)=>b[1]-a[1]);
       $('t-partners').innerHTML = rows.length
-        ? rows.map(([name,agg])=>`<tr><td>${esc(name)}</td><td>${agg.redeemed}</td></tr>`).join('')
+        ? rows.map(([name,total])=>`<tr><td>${esc(name)}</td><td>${total}</td></tr>`).join('')
         : `<tr><td colspan="2" class="muted">Sem retiradas registradas.</td></tr>`;
 
       const last = ps.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10);
@@ -765,14 +810,14 @@
     } else {
       sel.value = sel.options[0].value;
     }
-    toggleHNNote(); // [PATCH]
-    sel.onchange = toggleHNNote; // [PATCH]
+    toggleHNNote();
+    sel.onchange = toggleHNNote;
     dlg.showModal();
   }
 
   function closeRedeem(){
     CURRENT_REDEEM_ID = null;
-    document.getElementById('hn-note').value = ''; // [PATCH]
+    document.getElementById('hn-note').value = '';
     document.getElementById('dlg-redeem').close();
   }
 
@@ -780,14 +825,42 @@
     const id = CURRENT_REDEEM_ID;
     if(!id) return closeRedeem();
     const partner = document.getElementById('redeem-partner').value;
-    const note    = (partner === 'HN Notícias') ? (document.getElementById('hn-note').value.trim() || null) : null; // [PATCH]
+    const note    = (partner === 'HN Notícias') ? (document.getElementById('hn-note').value.trim() || null) : null;
     try{
-      await AdminAPI.redeemVoucher(id, partner, note); // [PATCH]
+      await AdminAPI.redeemVoucher(id, partner, note);
       closeRedeem();
       loadVouchers();
       loadDash();
     }catch(err){
       alert('Erro ao validar: '+ (err?.message || err));
+    }
+  }
+
+  // ====== Retirada manual (delivery)
+  function openDelivery(){
+    const dlg = document.getElementById('dlg-delivery');
+    const sel = document.getElementById('delivery-partner');
+    const wrap= document.getElementById('delivery-note-wrap');
+    const qty = document.getElementById('delivery-qty');
+    const note= document.getElementById('delivery-note');
+    qty.value = 1; note.value = '';
+    const toggle = ()=> wrap.style.display = (sel.value === 'HN Notícias') ? 'block' : 'none';
+    sel.onchange = toggle; toggle();
+    dlg.showModal();
+  }
+  function closeDelivery(){
+    document.getElementById('dlg-delivery').close();
+  }
+  async function submitDelivery(){
+    const partner = document.getElementById('delivery-partner').value;
+    const qty     = Math.max(1, parseInt(document.getElementById('delivery-qty').value||'1',10));
+    const note    = (partner==='HN Notícias') ? (document.getElementById('delivery-note').value.trim() || null) : null;
+    try{
+      await AdminAPI.createDelivery({ partner, qty, note });
+      closeDelivery();
+      loadDash();
+    }catch(err){
+      alert('Erro ao salvar retirada: ' + (err?.message || err));
     }
   }
 
