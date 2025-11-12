@@ -89,7 +89,6 @@
         <button class="btn" onclick="switchTab('questions')">➕ Nova pergunta</button>
         <button class="btn secondary" onclick="switchTab('participants')">🔎 Buscar participantes</button>
         <button class="btn secondary" onclick="switchTab('vouchers')">🏷️ Validar retirada</button>
-        <!-- NOVO: Criar retirada manual -->
         <button class="btn secondary" onclick="openDelivery()">📦 Criar retirada</button>
       </div>
       <div class="muted">Métricas gerais (todo o período)</div>
@@ -285,7 +284,7 @@
   </div>
 </dialog>
 
-<!-- NOVO: MODAL – Criar retirada manual (sem voucher) -->
+<!-- MODAL – Criar retirada manual (sem voucher) -->
 <dialog id="dlg-delivery">
   <div class="modal-h">Criar retirada (manual)</div>
   <div class="modal-b">
@@ -414,7 +413,7 @@
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
     redeemVoucher: (id, partner, note) => callApi("admin-vouchers",{ action:"redeem", id, partner, note }),
 
-    // NOVO: retiradas manuais
+    // retiradas manuais
     listDeliveries : () => callApi("admin-deliveries", { action:"list" }),
     createDelivery : ({partner,qty,note}) => callApi("admin-deliveries", { action:"create", partner, qty, note }),
 
@@ -431,7 +430,7 @@
         AdminAPI.listQuestions({}),
         AdminAPI.listParticipants(""),
         AdminAPI.listVouchers({}),
-        AdminAPI.listDeliveries() // NOVO
+        AdminAPI.listDeliveries() // pode falhar se ainda não existir — usamos settled
       ]);
 
       const qs = (qRes.status==='fulfilled' && Array.isArray(qRes.value?.items)) ? qRes.value.items : [];
@@ -447,28 +446,26 @@
       const manualTotal              = ds.reduce((s,d)=>s+Math.max(0,parseInt(d.qty||0,10)),0);
       $('kpi-r7').textContent        = String(redeemedTotal + manualTotal);
 
-      // Parceiros – somando vouchers retirados + retiradas manuais
-      const byPartner = {};
+      // Parceiros – somando vouchers retirados + retiradas manuais (tudo como número)
+      const partnerTotals = {};
 
-      // 1) vouchers retirados
-      const byPartner = {};
-for (const v of vs){
-  if (v.status !== 'retirado') continue;
-  const p =
-    (v.redeemed_partner && String(v.redeemed_partner).trim()) ? v.redeemed_partner :
-    ((v.partner && String(v.partner).trim()) ? v.partner : '(Sem parceiro)'); // fallback
-  if(!byPartner[p]) byPartner[p] = { redeemed: 0 };
-  byPartner[p].redeemed++;
-}
-      // 2) entregas manuais
-      for (const d of ds){
-        const p = (d.partner && d.partner.trim()) ? d.partner : '(Sem parceiro)';
-        const q = Math.max(0, parseInt(d.qty||0,10));
-        if(!byPartner[p]) byPartner[p] = 0;
-        byPartner[p] += q;
+      // 1) vouchers retirados (preferindo redeemed_partner, com fallback)
+      for (const v of vs){
+        if (v.status !== 'retirado') continue;
+        const p =
+          (v.redeemed_partner && String(v.redeemed_partner).trim()) ? v.redeemed_partner :
+          ((v.partner && String(v.partner).trim()) ? v.partner : '(Sem parceiro)');
+        partnerTotals[p] = (partnerTotals[p] || 0) + 1;
       }
 
-      const rows = Object.entries(byPartner).sort((a,b)=>b[1]-a[1]);
+      // 2) entregas manuais
+      for (const d of ds){
+        const p = (d.partner && String(d.partner).trim()) ? d.partner : '(Sem parceiro)';
+        const q = Math.max(0, parseInt(d.qty||0,10));
+        partnerTotals[p] = (partnerTotals[p] || 0) + q;
+      }
+
+      const rows = Object.entries(partnerTotals).sort((a,b)=>b[1]-a[1]);
       $('t-partners').innerHTML = rows.length
         ? rows.map(([name,total])=>`<tr><td>${esc(name)}</td><td>${total}</td></tr>`).join('')
         : `<tr><td colspan="2" class="muted">Sem retiradas registradas.</td></tr>`;
