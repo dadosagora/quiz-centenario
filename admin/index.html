@@ -451,12 +451,15 @@
       const byPartner = {};
 
       // 1) vouchers retirados
-      for (const v of vs){
-        if (v.status !== 'retirado') continue;
-        const p = (v.partner && v.partner.trim()) ? v.partner : '(Sem parceiro)';
-        if(!byPartner[p]) byPartner[p] = 0;
-        byPartner[p] += 1;
-      }
+      const byPartner = {};
+for (const v of vs){
+  if (v.status !== 'retirado') continue;
+  const p =
+    (v.redeemed_partner && String(v.redeemed_partner).trim()) ? v.redeemed_partner :
+    ((v.partner && String(v.partner).trim()) ? v.partner : '(Sem parceiro)'); // fallback
+  if(!byPartner[p]) byPartner[p] = { redeemed: 0 };
+  byPartner[p].redeemed++;
+}
       // 2) entregas manuais
       for (const d of ds){
         const p = (d.partner && d.partner.trim()) ? d.partner : '(Sem parceiro)';
