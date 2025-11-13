@@ -58,6 +58,11 @@
     /* Zebra */
     table.zebra tbody tr:nth-child(even){ background-color:#fafafa; }
     table.zebra tbody tr:hover{ background-color:#f3f4f6; }
+
+    .hn-notes-list{max-height:360px;overflow:auto;font-size:13px}
+    .hn-notes-list h3{margin:10px 0 4px;font-size:14px}
+    .hn-notes-list ul{margin:0 0 8px 0;padding-left:18px}
+    .hn-notes-list li{margin-bottom:4px}
   </style>
 </head>
 <body>
@@ -107,9 +112,9 @@
         <div style="overflow:auto">
           <table>
             <thead>
-              <tr><th>Parceiro</th><th>Retiradas</th></tr>
+              <tr><th>Parceiro</th><th>Retiradas</th><th>Ações</th></tr>
             </thead>
-            <tbody id="t-partners"><tr><td colspan="2" class="muted">Carregando…</td></tr></tbody>
+            <tbody id="t-partners"><tr><td colspan="3" class="muted">Carregando…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -180,6 +185,7 @@
             <th>Data</th>
             <th>Download</th>
             <th>Nota (1ª / total)</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -316,6 +322,19 @@
   </div>
 </dialog>
 
+<!-- MODAL – Observações HN -->
+<dialog id="dlg-hn-notes">
+  <div class="modal-h">Observações – HN Notícias</div>
+  <div class="modal-b">
+    <div id="hn-notes-content" class="hn-notes-list">
+      <div class="muted">Carregando…</div>
+    </div>
+  </div>
+  <div class="modal-f">
+    <button class="btn secondary" onclick="closeHNNotes()">Fechar</button>
+  </div>
+</dialog>
+
 <script>
   // ====== AUTENTICAÇÃO ======
   const token = localStorage.getItem('hn_admin_token');
@@ -416,6 +435,7 @@
 
     listParticipants: (search="") => callApi("admin-participants",{ action:"list",  search }),
     bulkStatsParticipants: (user_ids=[]) => callApi("admin-participants", { action:"stats_bulk", user_ids }),
+    deleteParticipant: (id)      => callApi("admin-participants",{ action:"delete", id }),
     
     listVouchers: ({search="",status=""}={}) => callApi("admin-vouchers",{ action:"list", search, status }),
     redeemVoucher: (id, partner, note) => callApi("admin-vouchers",{ action:"redeem", id, partner, note }),
@@ -430,6 +450,10 @@
 </script>
 
 <script>
+  // snapshots para usar nas observações HN
+  let DASH_VOUCHERS = [];
+  let DASH_DELIVERIES = [];
+
   // ====== DASHBOARD ======
   async function loadDash(){
     try{
@@ -444,6 +468,10 @@
       const ps = (pRes.status==='fulfilled' && Array.isArray(pRes.value?.items)) ? pRes.value.items : [];
       const vs = (vRes.status==='fulfilled' && Array.isArray(vRes.value?.items)) ? vRes.value.items : [];
       const ds = (dRes.status==='fulfilled' && Array.isArray(dRes.value?.items)) ? dRes.value.items : [];
+
+      // guardar para o modal de observações
+      DASH_VOUCHERS = vs;
+      DASH_DELIVERIES = ds;
 
       const actives = qs.filter(q=>q.ativa).length;
       $('kpi-questions').textContent = `${actives} / ${qs.length}`;
@@ -477,8 +505,14 @@
 
       const rows = Object.entries(byPartner).sort((a, b) => b[1] - a[1]);
       $('t-partners').innerHTML = rows.length
-        ? rows.map(([name, total]) => `<tr><td>${esc(name)}</td><td>${total}</td></tr>`).join('')
-        : `<tr><td colspan="2" class="muted">Sem retiradas registradas.</td></tr>`;
+        ? rows.map(([name, total]) => {
+            const isHN = (String(name).trim() === 'HN');
+            const btn = isHN
+              ? `<button class="btn secondary" onclick="openHNNotes()">Ver observações</button>`
+              : '—';
+            return `<tr><td>${esc(name)}</td><td>${total}</td><td>${btn}</td></tr>`;
+          }).join('')
+        : `<tr><td colspan="3" class="muted">Sem retiradas registradas.</td></tr>`;
 
       const last = ps.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10);
       $('ul-recent').innerHTML = last.length
@@ -491,9 +525,62 @@
     }catch(err){
       console.error('Falha no dashboard', err);
       ['kpi-questions','kpi-users','kpi-v7','kpi-r7'].forEach(id => $(id).textContent = '—');
-      $('t-partners').innerHTML = `<tr><td colspan="2" class="warn">Erro ao carregar</td></tr>`;
+      $('t-partners').innerHTML = `<tr><td colspan="3" class="warn">Erro ao carregar</td></tr>`;
       $('ul-recent').innerHTML  = `<li class="warn">Erro ao carregar</li>`;
     }
+  }
+
+  // Modal de observações HN
+  function openHNNotes(){
+    const dlg = $('dlg-hn-notes');
+    const box = $('hn-notes-content');
+
+    const hnVoucherNotes = DASH_VOUCHERS.filter(v=>{
+      const partnerEnum =
+        (v.redeemed_partner && String(v.redeemed_partner).trim())
+          ? String(v.redeemed_partner).trim()
+          : ((v.partner && String(v.partner).trim()) ? String(v.partner).trim() : '');
+      const note = v.note ?? v.obs ?? v.observacao;
+      return v.status === 'retirado' && partnerEnum === 'HN' && note && String(note).trim();
+    });
+
+    const hnDeliveryNotes = DASH_DELIVERIES.filter(d=>{
+      const partnerEnum = (d.partner && String(d.partner).trim()) ? String(d.partner).trim() : '';
+      const note = d.note ?? d.obs ?? d.observacao;
+      return partnerEnum === 'HN' && note && String(note).trim();
+    });
+
+    if(!hnVoucherNotes.length && !hnDeliveryNotes.length){
+      box.innerHTML = `<div class="muted">Nenhuma observação cadastrada para o HN até o momento.</div>`;
+    }else{
+      let html = '';
+      if(hnVoucherNotes.length){
+        html += `<h3>Vouchers com observação</h3><ul>`;
+        html += hnVoucherNotes.map(v=>{
+          const note = v.note ?? v.obs ?? v.observacao;
+          const userName = v.user?.nome || '';
+          const dt = v.redeemed_at || v.updated_at || v.issued_at;
+          return `<li><strong>${esc(userName || '—')}</strong> – ${esc(note)} <span class="muted">(${formatDate(dt)})</span></li>`;
+        }).join('');
+        html += `</ul>`;
+      }
+      if(hnDeliveryNotes.length){
+        html += `<h3>Retiradas manuais com observação</h3><ul>`;
+        html += hnDeliveryNotes.map(d=>{
+          const note = d.note ?? d.obs ?? d.observacao;
+          const dt = d.created_at;
+          const qty = d.qty ?? 0;
+          return `<li><strong>${qty} un.</strong> – ${esc(note)} <span class="muted">(${formatDate(dt)})</span></li>`;
+        }).join('');
+        html += `</ul>`;
+      }
+      box.innerHTML = html;
+    }
+
+    dlg.showModal();
+  }
+  function closeHNNotes(){
+    $('dlg-hn-notes').close();
   }
 
   // ====== RANKING ======
@@ -701,7 +788,7 @@
   }
 
   async function loadParticipants(){
-    pBody.innerHTML = '<tr><td colspan="6">Carregando…</td></tr>';
+    pBody.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
     try{
       const search = $('p-search').value.trim() || undefined;
       const { items } = await AdminAPI.listParticipants(search || "");
@@ -729,6 +816,7 @@
             <td>${formatDate(u.created_at)}</td>
             <td>${badge}</td>
             <td>${nota}</td>
+            <td><button class="btn secondary" onclick="deleteParticipant('${u.id}')">Excluir</button></td>
           </tr>
         `;
       }).join('');
@@ -748,7 +836,7 @@
       pBody.dataset.rows = JSON.stringify(rowsForExport);
 
     }catch(err){
-      pBody.innerHTML = `<tr><td colspan="6" class="warn">Erro: ${esc(err.message)}</td></tr>`;
+      pBody.innerHTML = `<tr><td colspan="7" class="warn">Erro: ${esc(err.message)}</td></tr>`;
       pBody.dataset.rows = "[]";
     }
   }
@@ -757,6 +845,17 @@
     const rows = JSON.parse(pBody.dataset.rows || "[]");
     if(!rows.length){ alert("Nada para exportar."); return; }
     csvDownload(`participantes_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  }
+
+  async function deleteParticipant(id){
+    if(!confirm('Excluir este participante e todas as participações vinculadas?')) return;
+    try{
+      await AdminAPI.deleteParticipant(id);
+      loadParticipants();
+      loadDash();
+    }catch(err){
+      alert('Erro ao excluir participante: ' + (err?.message || err));
+    }
   }
 
   // ====== VOUCHERS
