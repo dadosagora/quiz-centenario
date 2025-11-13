@@ -347,6 +347,13 @@
   }
   function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
+  // Mapa label → ENUM (usado no backend)
+  const PARTNER_ENUM = {
+    "Mina": "Mina",
+    "Café Imigrante": "Cafe Imigrante",
+    "HN Notícias": "HN"
+  };
+
   // ====== TABS ======
   const tabs = document.querySelectorAll('.tab');
   tabs.forEach(t => t.onclick = ()=>switchTab(t.dataset.tab));
@@ -446,28 +453,31 @@
       const manualTotal              = ds.reduce((s,d)=>s+Math.max(0,parseInt(d.qty||0,10)),0);
       $('kpi-r7').textContent        = String(redeemedTotal + manualTotal);
 
-      // Parceiros – somando vouchers retirados + retiradas manuais (tudo como número)
-      const partnerTotals = {};
+      // Parceiros – somando vouchers retirados + retiradas manuais
+      const byPartner = {};
 
-      // 1) vouchers retirados (preferindo redeemed_partner, com fallback)
-      for (const v of vs){
+      // 1) vouchers retirados
+      for (const v of vs) {
         if (v.status !== 'retirado') continue;
         const p =
-          (v.redeemed_partner && String(v.redeemed_partner).trim()) ? v.redeemed_partner :
-          ((v.partner && String(v.partner).trim()) ? v.partner : '(Sem parceiro)');
-        partnerTotals[p] = (partnerTotals[p] || 0) + 1;
+          (v.redeemed_partner && String(v.redeemed_partner).trim())
+            ? v.redeemed_partner
+            : ((v.partner && String(v.partner).trim()) ? v.partner : '(Sem parceiro)');
+        if (!byPartner[p]) byPartner[p] = 0;
+        byPartner[p] += 1;
       }
 
       // 2) entregas manuais
-      for (const d of ds){
-        const p = (d.partner && String(d.partner).trim()) ? d.partner : '(Sem parceiro)';
-        const q = Math.max(0, parseInt(d.qty||0,10));
-        partnerTotals[p] = (partnerTotals[p] || 0) + q;
+      for (const d of ds) {
+        const p = (d.partner && d.partner.trim()) ? d.partner : '(Sem parceiro)';
+        const q = Math.max(0, parseInt(d.qty || 0, 10));
+        if (!byPartner[p]) byPartner[p] = 0;
+        byPartner[p] += q;
       }
 
-      const rows = Object.entries(partnerTotals).sort((a,b)=>b[1]-a[1]);
+      const rows = Object.entries(byPartner).sort((a, b) => b[1] - a[1]);
       $('t-partners').innerHTML = rows.length
-        ? rows.map(([name,total])=>`<tr><td>${esc(name)}</td><td>${total}</td></tr>`).join('')
+        ? rows.map(([name, total]) => `<tr><td>${esc(name)}</td><td>${total}</td></tr>`).join('')
         : `<tr><td colspan="2" class="muted">Sem retiradas registradas.</td></tr>`;
 
       const last = ps.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10);
@@ -696,8 +706,8 @@
       const search = $('p-search').value.trim() || undefined;
       const { items } = await AdminAPI.listParticipants(search || "");
       if(!items.length){ 
-        pBody.innerHTML=''; 
-        pEmpty.style.display='block'; 
+        pBody.innerHTML='';
+        pEmpty.style.display='block';
         pBody.dataset.rows = "[]";
         return; 
       }
@@ -821,18 +831,24 @@
     document.getElementById('dlg-redeem').close();
   }
 
+  // ====== (C) Enviar ENUM correto ao validar voucher ======
   async function submitRedeem(){
     const id = CURRENT_REDEEM_ID;
     if(!id) return closeRedeem();
-    const partner = document.getElementById('redeem-partner').value;
-    const note    = (partner === 'HN Notícias') ? (document.getElementById('hn-note').value.trim() || null) : null;
+
+    const label = document.getElementById('redeem-partner').value; // "Mina", "Café Imigrante", "HN Notícias"
+    const partnerEnum = PARTNER_ENUM[label];                       // "Mina" | "Cafe Imigrante" | "HN"
+    const note = (label === 'HN Notícias')
+      ? (document.getElementById('hn-note').value.trim() || null)
+      : null;
+
     try{
-      await AdminAPI.redeemVoucher(id, partner, note);
+      await AdminAPI.redeemVoucher(id, partnerEnum, note);
       closeRedeem();
       loadVouchers();
       loadDash();
     }catch(err){
-      alert('Erro ao validar: '+ (err?.message || err));
+      alert('Erro ao validar: ' + (err?.message || err));
     }
   }
 
@@ -851,12 +867,18 @@
   function closeDelivery(){
     document.getElementById('dlg-delivery').close();
   }
+
+  // ====== (D) Enviar ENUM correto ao criar retirada manual ======
   async function submitDelivery(){
-    const partner = document.getElementById('delivery-partner').value;
-    const qty     = Math.max(1, parseInt(document.getElementById('delivery-qty').value||'1',10));
-    const note    = (partner==='HN Notícias') ? (document.getElementById('delivery-note').value.trim() || null) : null;
+    const label = document.getElementById('delivery-partner').value; // "Mina", "Café Imigrante", "HN Notícias"
+    const partnerEnum = PARTNER_ENUM[label];                         // "Mina" | "Cafe Imigrante" | "HN"
+    const qty  = Math.max(1, parseInt(document.getElementById('delivery-qty').value || '1', 10));
+    const note = (label === 'HN Notícias')
+      ? (document.getElementById('delivery-note').value.trim() || null)
+      : null;
+
     try{
-      await AdminAPI.createDelivery({ partner, qty, note });
+      await AdminAPI.createDelivery({ partner: partnerEnum, qty, note });
       closeDelivery();
       loadDash();
     }catch(err){
