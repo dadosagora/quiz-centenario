@@ -49,6 +49,20 @@
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
     .link{color:var(--gold-2);text-decoration:underline;cursor:pointer}
+
+    /* link para consultar voucher */
+    .voucher-link{
+      margin-top:14px;
+      font-size:14px;
+      text-align:center;
+      color:var(--muted);
+    }
+    .voucher-link a{
+      color:var(--gold-2);
+      font-weight:600;
+      text-decoration:underline;
+    }
+
     @media (max-height:760px){
       .head{padding:8px 0 4px}
       .logo-wrap img{max-width:360px}
@@ -102,6 +116,12 @@
       </form>
 
       <div id="out" class="msg" hidden></div>
+
+      <!-- LINK PARA CONSULTAR VOUCHER -->
+      <div class="voucher-link">
+        Já participou e perdeu seu código?
+        <a href="voucher.html">Clique aqui para consultar seu voucher.</a>
+      </div>
     </div>
   </main>
 
@@ -201,7 +221,6 @@
     if(!q.length) return;
     const next = q[0];
     try{
-      // tenta inserir
       const { data, error } = await client
         .from('users')
         .insert(next)
@@ -210,7 +229,6 @@
 
       let userId = data?.id || next.id;
 
-      // se duplicidade por whatsapp, busca existente e segue
       if(error && String(error.message||'').toLowerCase().includes('duplicate')){
         const { data: found, error: err2 } = await client
           .from('users').select('id').eq('whatsapp', next.whatsapp).maybeSingle();
@@ -218,10 +236,9 @@
         userId = found?.id || next.id;
       }
 
-      // remove da fila e garante id
       const rest = q.slice(1); lsSetJSON(LS_KEYS.queue, rest);
       localStorage.setItem('hn_user_id', userId);
-    }catch(_){ /* tenta depois */ }
+    }catch(_){ }
   }
   function scheduleQueueFlusher(){
     setInterval(flushSignupQueueOnce, 7000);
@@ -257,19 +274,16 @@
       setBusy(false); return false;
     }
 
-    // IMPORTANTE: zera qualquer user antigo para não “herdar” ID
     localStorage.removeItem('hn_user_id');
 
     const id = uuidv4();
     const created_at = new Date().toISOString();
     const payload = { id, nome, cidade, whatsapp, consent, created_at };
 
-    // token anti-replay por 60s
     const tokenNow = Date.now();
     localStorage.setItem(LS_KEYS.token, String(tokenNow));
 
     try{
-      // 1) TENTA INSERIR NOVO PARTICIPANTE
       const insertFn = async ()=>{
         const r = await client
           .from('users')
@@ -277,12 +291,10 @@
           .select('id')
           .maybeSingle();
 
-        // Se inseriu, beleza
         if(!r.error && r.data?.id){
           return r.data.id;
         }
 
-        // 2) DUPLICIDADE (mesmo WhatsApp) → reusa o existente
         const msg = String(r.error?.message||'').toLowerCase();
         if(msg.includes('duplicate') || msg.includes('unique')){
           const { data: found, error: err2 } = await client
@@ -291,7 +303,6 @@
           return found?.id || id;
         }
 
-        // 3) Outros erros → propaga
         if(r.error) throw r.error;
 
         return id;
@@ -304,10 +315,9 @@
       setTimeout(()=>location.href='quiz.html', 500);
 
     }catch(err){
-      // Falha de rede / servidor: coloca na fila offline e segue
       const queue = lsGetJSON(LS_KEYS.queue, []);
       queue.push(payload); lsSetJSON(LS_KEYS.queue, queue);
-      localStorage.setItem('hn_user_id', id); // garante um ID para a sessão
+      localStorage.setItem('hn_user_id', id);
       showMsg('Conexão instável. Salvamos localmente e enviaremos em segundo plano. Prosseguindo para o quiz…', 'ok');
       setTimeout(()=>location.href='quiz.html', 600);
     }finally{
