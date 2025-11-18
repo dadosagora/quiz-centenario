@@ -68,6 +68,49 @@
     .error{margin-top:12px;font-size:14px;color:#b00020}
     .ok{color:#1b5e20}
 
+    /* Bloco de parceiros (quando status = pendente) */
+    .partners-box{
+      margin-top:14px;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid #e3e3e3;
+      background:#f7f7f7;
+    }
+    .partners-box h3{
+      margin:0 0 8px;
+      font-size:15px;
+    }
+    .partners-list{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .partner-item{
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid #dedede;
+      background:#fff;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .partner-name{
+      font-size:14px;
+      font-weight:600;
+    }
+    .partner-btn{
+      display:inline-block;
+      padding:7px 10px;
+      border-radius:999px;
+      border:1px solid #111;
+      font-size:13px;
+      font-weight:600;
+      text-decoration:none;
+      text-align:center;
+      color:#111;
+      background:#f9f9f9;
+    }
+
     footer{border-top:1px solid var(--border);background:#fff}
     .footer-inner{width:min(980px,94vw);margin:0 auto;padding:12px;display:flex;justify-content:center}
     .footer-inner img{max-width:100%;height:auto}
@@ -94,7 +137,7 @@
 
       <div class="actions">
         <button id="btnSearch" class="btn" type="button">Consultar código</button>
-        <button id="btnLogin" class="btn btn-gold" type="button" onclick="window.location.href='login.html'">
+        <button id="btnLogin" class="btn btn-gold" type="button" onclick="window.location.href='signup.html'">
           Iniciar o Quiz
         </button>
         <button class="btn secondary" type="button"
@@ -125,6 +168,39 @@
   const elBtn     = document.getElementById('btnSearch');
   const elResult  = document.getElementById('result');
   const elError   = document.getElementById('msgError');
+
+  // mesmos parceiros do quiz.html
+  const PARTNERS = [
+    {
+      name: "Mina Café & Vinho - Praça do Congresso (Centro)",
+      url: "https://www.instagram.com/minacafevinho/"
+    },
+    {
+      name: "Café do Imigrante - Parque do Imigrante (Rio Maina)",
+      url: "https://www.instagram.com/cafe_do_imigrante/"
+    }
+  ];
+
+  function renderPartnersBox(){
+    if (!Array.isArray(PARTNERS) || !PARTNERS.length) return '';
+    const items = PARTNERS.map(p => `
+      <div class="partner-item">
+        <div class="partner-name">${p.name}</div>
+        <a href="${p.url}" target="_blank" rel="noopener noreferrer" class="partner-btn">
+          Ver no Instagram
+        </a>
+      </div>
+    `).join('');
+
+    return `
+      <div class="partners-box">
+        <h3>Locais de retirada</h3>
+        <div class="partners-list">
+          ${items}
+        </div>
+      </div>
+    `;
+  }
 
   function normalizeDigits(str){
     return (str || '').replace(/\D/g, '');
@@ -184,7 +260,7 @@
     try{
       const { data, error } = await client
         .from('ganhadores_busca_v')
-        .select('code,status,expires_at,nome,cidade,whatsapp')
+        .select('code,status,expires_at,nome,cidade,whatsapp,issued_at')
         .ilike('whatsapp', '%' + digits + '%')
         .order('issued_at', { ascending:false })
         .limit(1);
@@ -210,6 +286,10 @@
       const statusLower = (v.status || '').toLowerCase();
       const showValidity = statusLower !== 'retirado';
 
+      const partnersHtml = statusLower === 'pendente'
+        ? renderPartnersBox()
+        : '';
+
       elResult.innerHTML = `
         <h2>Código localizado</h2>
         <div><strong>Nome:</strong> ${v.nome || '—'}</div>
@@ -228,6 +308,7 @@
                Este código já foi <strong>retirado</strong>. Em caso de dúvida, entre em contato com o HN Notícias.
              </div>`
         }
+        ${partnersHtml}
       `;
       elResult.style.display = 'block';
     } catch(e){
@@ -242,10 +323,8 @@
 
   // Aplica máscara enquanto digita
   elWhats.addEventListener('input', (e)=>{
-    const pos = e.target.selectionStart;
     const masked = maskWhatsapp(e.target.value);
     e.target.value = masked;
-    // cursor vai para o fim; isso já é aceitável para esse caso simples
   });
 
   elBtn.addEventListener('click', searchVoucher);
