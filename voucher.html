@@ -41,6 +41,19 @@
     .btn.secondary{background:#fff;color:#111;border:1px solid #cfcfcf}
     .btn[disabled]{opacity:.6;cursor:not-allowed}
 
+    /* Botão dourado (Iniciar o Quiz) */
+    .btn-gold{
+      background:linear-gradient(180deg,var(--gold),var(--gold-2));
+      border-color:var(--gold-2);
+      color:#111;
+      font-weight:800;
+    }
+    .btn-gold:hover{
+      filter:brightness(1.05);
+      transform:translateY(-1px);
+      transition:transform .15s,filter .2s;
+    }
+
     .result{margin-top:16px;border-radius:14px;padding:12px 14px;border:1px solid #e3e3e3;background:#fafafa}
     .result h2{margin:0 0 6px;font-size:17px}
     .code{
@@ -81,8 +94,12 @@
 
       <div class="actions">
         <button id="btnSearch" class="btn" type="button">Consultar código</button>
-        <button id="btnLogin" class="btn secondary" type="button" onclick="window.location.href='login.html'">
+        <button id="btnLogin" class="btn btn-gold" type="button" onclick="window.location.href='login.html'">
           Iniciar o Quiz
+        </button>
+        <button class="btn secondary" type="button"
+                onclick="window.location.href='https://hnnoticias.com.br'">
+          Ir para o site HN Notícias
         </button>
       </div>
 
@@ -111,6 +128,20 @@
 
   function normalizeDigits(str){
     return (str || '').replace(/\D/g, '');
+  }
+
+  // Máscara de WhatsApp enquanto digita
+  function maskWhatsapp(value){
+    const digits = normalizeDigits(value).slice(0, 11); // até 11 dígitos
+    if (!digits) return '';
+
+    if (digits.length <= 2){
+      return `(${digits}`;
+    }
+    if (digits.length <= 7){
+      return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
+    }
+    return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
   }
 
   function formatDateBR(iso){
@@ -151,7 +182,6 @@
     elBtn.textContent = 'Consultando...';
 
     try{
-      // Tentamos localizar pelo trecho de dígitos (para tolerar parênteses, traços etc.)
       const { data, error } = await client
         .from('ganhadores_busca_v')
         .select('code,status,expires_at,nome,cidade,whatsapp')
@@ -177,6 +207,8 @@
       const v = data[0];
       const statusLabel = mapStatus(v.status);
       const expires = formatDateBR(v.expires_at);
+      const statusLower = (v.status || '').toLowerCase();
+      const showValidity = statusLower !== 'retirado';
 
       elResult.innerHTML = `
         <h2>Código localizado</h2>
@@ -186,10 +218,16 @@
         <div class="status">
           <span>Status:</span> ${statusLabel}
         </div>
-        <div class="small">
-          Validade: ${expires || 'verifique com a equipe do HN Notícias'}.
-          Apresente um documento com foto no momento da retirada.
-        </div>
+        ${
+          showValidity
+          ? `<div class="small">
+               Validade: ${expires || 'verifique com a equipe do HN Notícias'}.
+               Apresente um documento com foto no momento da retirada.
+             </div>`
+          : `<div class="small">
+               Este código já foi <strong>retirado</strong>. Em caso de dúvida, entre em contato com o HN Notícias.
+             </div>`
+        }
       `;
       elResult.style.display = 'block';
     } catch(e){
@@ -201,6 +239,14 @@
       elBtn.textContent = 'Consultar código';
     }
   }
+
+  // Aplica máscara enquanto digita
+  elWhats.addEventListener('input', (e)=>{
+    const pos = e.target.selectionStart;
+    const masked = maskWhatsapp(e.target.value);
+    e.target.value = masked;
+    // cursor vai para o fim; isso já é aceitável para esse caso simples
+  });
 
   elBtn.addEventListener('click', searchVoucher);
   elWhats.addEventListener('keydown', (e)=>{
