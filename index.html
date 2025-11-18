@@ -62,7 +62,11 @@
     .strong{font-weight:800}
     ul{margin:8px 0 0 18px;color:#444}
 
-    .cta{padding:14px;border-top:1px solid var(--border);display:flex;justify-content:center}
+    .cta{
+      padding:14px;border-top:1px solid var(--border);
+      display:flex;flex-direction:column;align-items:center;gap:12px;
+    }
+
     .btn-cta{
       appearance:none; border:0; cursor:pointer;
       padding:16px 20px; min-width:280px; border-radius:14px;
@@ -74,14 +78,12 @@
     }
     .btn-cta:hover{ filter:brightness(1.05); box-shadow: 0 8px 22px rgba(201,162,39,.45), inset 0 1px 0 rgba(255,255,255,.7);}
     .btn-cta:active{ transform:translateY(1px) }
-    .btn-cta::after{
-      content:""; position:absolute; inset:-2px; border-radius:16px;
-      background: radial-gradient(120px 40px at 50% 0%, rgba(255,255,255,.45), transparent 60%);
-      opacity:.6; pointer-events:none; animation:shine 2.6s ease-in-out infinite;
-    }
-    @keyframes shine{
-      0%,100%{opacity:.35; transform:translateY(0)}
-      50%{opacity:.75; transform:translateY(-1px)}
+
+    .btn-secondary{
+      appearance:none;border-radius:12px;padding:12px 16px;
+      border:1px solid #cfcfcf;background:#fff;color:#111;
+      font-size:15px;font-weight:700;cursor:pointer;
+      min-width:260px;
     }
 
     footer{border-top:1px solid var(--border);background:#fff}
@@ -110,14 +112,15 @@
         <h1>Quiz do Centenário de Criciúma</h1>
         <p>Um século de história, conquistas e memórias.</p>
       </div>
+
       <div class="content">
         <p>Para celebrar o centenário de <span class="strong">emancipação político-administrativa</span> de Criciúma,o portal HN Notícias criou o <span class="strong">Quiz do Centenário</span>, uma forma divertida de testar seus conhecimentos sobre a cidade e ganhar um presente especial.</p>
 
         <p class="strong">Como funciona?</p>
         <p>
-          O quiz é organizado em <span class="strong"> 5 lotes de 10 perguntas</span>, com feedback imediato.
+          O quiz é organizado em <span class="strong">5 lotes de 10 perguntas</span>, com feedback imediato.
           <br><span class="strong">Ao concluir o primeiro lote</span>, você recebe o <span class="strong">código para retirar o livro físico</span>.
-          <br>O <span class="strong">download do livro em PDF</span> é liberado <span class="strong"> ao concluir o último lote</span>.
+          <br>O <span class="strong">download do livro em PDF</span> é liberado <span class="strong">ao concluir o último lote</span>.
         </p>
 
         <ul>
@@ -133,8 +136,16 @@
           </li>
         </ul>
       </div>
+
       <div class="cta">
-        <button class="btn-cta" id="btnStart" aria-label="Quero participar do Quiz">Quero participar do Quiz</button>
+        <button class="btn-cta" id="btnStart" aria-label="Quero participar do Quiz">
+          Quero participar do Quiz
+        </button>
+
+        <!-- NOVO BOTÃO -->
+        <button class="btn-secondary" onclick="window.location.href='voucher.html'">
+          Já participei e perdi meu código
+        </button>
       </div>
     </section>
   </main>
@@ -147,7 +158,9 @@
 </div>
 
 <script>
-  document.getElementById('btnStart').addEventListener('click', ()=>{ window.location.href='signup.html'; });
+  document.getElementById('btnStart').addEventListener('click', ()=>{
+    window.location.href='signup.html';
+  });
 </script>
 </body>
 </html>
