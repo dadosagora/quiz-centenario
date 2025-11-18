@@ -50,17 +50,38 @@
     .footer-inner img{max-width:100%;height:auto}
     .link{color:var(--gold-2);text-decoration:underline;cursor:pointer}
 
-    /* link para consultar voucher */
-    .voucher-link{
-      margin-top:14px;
-      font-size:14px;
+    /* BLOCO PARA CONSULTAR VOUCHER */
+    .voucher-section{
+      margin-top:18px;
+      padding:16px 14px;
+      border-radius:16px;
+      border:1px solid #e5e5e5;
+      background:#fafafa;
       text-align:center;
+    }
+    .voucher-section-title{
+      font-size:16px;
+      font-weight:700;
+      margin:0 0 4px;
+    }
+    .voucher-section-text{
+      margin:0 0 12px;
+      font-size:14px;
       color:var(--muted);
     }
-    .voucher-link a{
-      color:var(--gold-2);
-      font-weight:600;
-      text-decoration:underline;
+    .voucher-btn{
+      display:inline-block;
+      padding:12px 22px;
+      border-radius:999px;
+      border:none;
+      background:#111;
+      color:#fff;
+      font-weight:800;
+      font-size:14px;
+      cursor:pointer;
+    }
+    .voucher-btn:active{
+      transform:translateY(1px);
     }
 
     @media (max-height:760px){
@@ -71,6 +92,7 @@
       .card{padding:12px}
       h2{font-size:20px}
       .btn{padding:12px 14px}
+      .voucher-section{margin-top:14px;padding:14px 12px}
     }
   </style>
 </head>
@@ -117,10 +139,21 @@
 
       <div id="out" class="msg" hidden></div>
 
-      <!-- LINK PARA CONSULTAR VOUCHER -->
-      <div class="voucher-link">
-        Já participou e perdeu seu código?
-        <a href="voucher.html">Clique aqui para consultar seu voucher.</a>
+      <!-- BLOCO CONSULTA VOUCHER -->
+      <div class="voucher-section">
+        <div class="voucher-section-title">
+          Já participou do Quiz do Centenário?
+        </div>
+        <p class="voucher-section-text">
+          Recupere seu código e veja onde retirar seu livro.
+        </p>
+        <button
+          type="button"
+          class="voucher-btn"
+          onclick="window.location.href='voucher.html'"
+        >
+          Consultar meu voucher
+        </button>
       </div>
     </div>
   </main>
